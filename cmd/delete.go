@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/mewisme/mewsh/internal/cliui"
 	"github.com/mewisme/mewsh/internal/secret"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,7 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 		_ = secret.DeletePassword(ref)
-		fmt.Printf("deleted profile %q\n", alias)
+		cliui.OKf(cmd.OutOrStdout(), "Deleted profile %q.", alias)
 		return nil
 	},
 }

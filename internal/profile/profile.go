@@ -120,9 +120,18 @@ func (p Profile) Validate(existingAliases []string, editing bool) error {
 	return nil
 }
 
-func (p Profile) BuildSSHArgs(host string, port int) []string {
+func (p Profile) BuildSSHArgs(host string, port int, background bool) []string {
 	target := fmt.Sprintf("%s@%s", p.User, host)
 	args := []string{"ssh"}
+
+	if background {
+		// Never allocate a local TTY for background workers (avoids corrupting the invoking terminal).
+		args = append(args,
+			"-n", "-T",
+			"-o", "ServerAliveInterval=30",
+			"-o", "ServerAliveCountMax=10",
+		)
+	}
 
 	if runtime.GOOS == "windows" {
 		args = append(args,
@@ -130,16 +139,24 @@ func (p Profile) BuildSSHArgs(host string, port int) []string {
 			"-o", "ConnectTimeout=30",
 			"-o", "StrictHostKeyChecking=accept-new",
 		)
-		if p.AuthType == AuthPassword {
-			// No -tt: password comes from SSH_ASKPASS; RequestTTY keeps the remote shell interactive.
+		if !background {
+			if p.AuthType == AuthPassword {
+				// No -tt: password comes from SSH_ASKPASS; RequestTTY keeps the remote shell interactive.
+				args = append(args,
+					"-o", "RequestTTY=force",
+					"-o", "PreferredAuthentications=keyboard-interactive,password",
+					"-o", "PubkeyAuthentication=no",
+					"-o", "NumberOfPasswordPrompts=3",
+				)
+			} else {
+				args = append(args, "-tt")
+			}
+		} else if p.AuthType == AuthPassword {
 			args = append(args,
-				"-o", "RequestTTY=force",
 				"-o", "PreferredAuthentications=keyboard-interactive,password",
 				"-o", "PubkeyAuthentication=no",
 				"-o", "NumberOfPasswordPrompts=3",
 			)
-		} else {
-			args = append(args, "-tt")
 		}
 	}
 
@@ -148,6 +165,10 @@ func (p Profile) BuildSSHArgs(host string, port int) []string {
 		args = append(args, "-i", p.KeyPath)
 	}
 	args = append(args, target)
+	if background {
+		// Without a local TTY, a default remote shell often exits immediately; hold the session open.
+		args = append(args, "sleep", "infinity")
+	}
 	return args
 }
 

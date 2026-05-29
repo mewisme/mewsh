@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/mewisme/mewsh/internal/cliui"
 	"github.com/mewisme/mewsh/internal/cloudflared"
 	"github.com/mewisme/mewsh/internal/config"
 	"github.com/mewisme/mewsh/internal/terminal"
@@ -18,18 +19,16 @@ var doctorCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		w := cmd.OutOrStdout()
+		cliui.Section(w, "Environment checks")
 		ok := true
 		printCheck := func(name string, pass bool, detail string) {
-			status := "ok"
-			if !pass {
-				status = "fail"
+			if pass {
+				cliui.OKf(w, "%s — %s", name, detail)
+			} else {
+				cliui.Errf(w, "%s — %s", name, detail)
 				ok = false
 			}
-			fmt.Printf("[%s] %s", status, name)
-			if detail != "" {
-				fmt.Printf(": %s", detail)
-			}
-			fmt.Println()
 		}
 
 		if path, err := exec.LookPath("ssh"); err != nil {
@@ -51,16 +50,18 @@ var doctorCmd = &cobra.Command{
 		}
 
 		path, _ := config.Path()
-		for _, issue := range config.CheckPermissions() {
+		issues := config.CheckPermissions()
+		for _, issue := range issues {
 			printCheck("config permissions", false, issue.Message)
 		}
-		if len(config.CheckPermissions()) == 0 {
+		if len(issues) == 0 {
 			printCheck("config permissions", true, path)
 		}
 
 		if !ok {
 			return fmt.Errorf("doctor found issues")
 		}
+		cliui.OKf(w, "All checks passed.")
 		return nil
 	},
 }
@@ -82,7 +83,7 @@ var cloudflaredUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("cloudflared updated: %s\n", path)
+		cliui.OKf(cmd.OutOrStdout(), "cloudflared updated: %s", path)
 		return nil
 	},
 }

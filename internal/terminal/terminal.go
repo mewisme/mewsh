@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/mewisme/mewsh/internal/cliui"
 )
 
 // WindowTitle is the OS terminal window title (not the in-app TUI header).
@@ -67,9 +69,15 @@ func ensureSSH(name string) error {
 	return nil
 }
 
+// FormatCommand returns a shell-ready, copy-pasteable command line.
+func FormatCommand(argv []string) string {
+	return shellJoin(argv)
+}
+
 func printFallback(argv []string, spawnErr error) error {
-	fmt.Fprintf(os.Stderr, "failed to spawn terminal: %v\n", spawnErr)
-	fmt.Fprintf(os.Stderr, "run manually: %s\n", shellJoin(argv))
+	cliui.Errf(os.Stderr, "failed to spawn terminal: %v", spawnErr)
+	cliui.Section(os.Stderr, "Run manually")
+	cliui.Block(os.Stderr, cliui.LevelCmd, FormatCommand(argv))
 	return fmt.Errorf("failed to spawn terminal: %w", spawnErr)
 }
 
@@ -84,10 +92,49 @@ func sshProcessMarkers(argv []string) (host, port string) {
 			port = argv[i+1]
 		}
 	}
-	if len(argv) > 0 {
-		host = argv[len(argv)-1]
-	}
+	host = sshDestinationArg(argv)
 	return host, port
+}
+
+// sshDestinationArg returns the ssh Host/user@host positional, not trailing remote commands.
+func sshDestinationArg(argv []string) string {
+	if len(argv) < 2 {
+		return ""
+	}
+	skip := false
+	var positionals []string
+	for i := 1; i < len(argv); i++ {
+		if skip {
+			skip = false
+			continue
+		}
+		arg := argv[i]
+		if strings.HasPrefix(arg, "-") {
+			if sshFlagTakesValue(arg) {
+				skip = true
+			}
+			continue
+		}
+		positionals = append(positionals, arg)
+	}
+	for _, p := range positionals {
+		if strings.Contains(p, "@") {
+			return p
+		}
+	}
+	if len(positionals) > 0 {
+		return positionals[0]
+	}
+	return ""
+}
+
+func sshFlagTakesValue(flag string) bool {
+	switch flag {
+	case "-p", "-i", "-F", "-c", "-J", "-o", "-b", "-E", "-e", "-I", "-L", "-R", "-W", "-w":
+		return true
+	default:
+		return false
+	}
 }
 
 func shellJoin(argv []string) string {

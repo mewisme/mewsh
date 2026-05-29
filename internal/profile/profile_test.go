@@ -80,13 +80,24 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestBuildSSHArgsBackgroundKeepsSessionOpen(t *testing.T) {
+	p := Profile{User: "mew", AuthType: AuthKey, KeyPath: "/tmp/id_rsa"}
+	args := p.BuildSSHArgs("127.0.0.1", 22, true)
+	joined := stringsJoinArgs(args)
+	for _, want := range []string{"-n", "-T", "ServerAliveInterval", "sleep", "infinity", "mew@127.0.0.1"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in %v", want, args)
+		}
+	}
+}
+
 func TestBuildSSHArgs(t *testing.T) {
 	p := Profile{
 		User:     "ubuntu",
 		AuthType: AuthKey,
 		KeyPath:  "/home/user/.ssh/id_rsa",
 	}
-	args := p.BuildSSHArgs("127.0.0.1", 2222)
+	args := p.BuildSSHArgs("127.0.0.1", 2222, false)
 	if args[0] != "ssh" {
 		t.Fatalf("argv[0] = %q, want ssh", args[0])
 	}

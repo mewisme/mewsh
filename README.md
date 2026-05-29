@@ -17,7 +17,7 @@ SSH profile manager with a terminal UI and CLI. Save hosts, users, and auth sett
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap mewisme/mewsh
+brew tap mewisme/mewsh https://github.com/mewisme/mewsh
 brew install --cask mewsh
 ```
 
@@ -87,7 +87,12 @@ mewsh add              # Add profile (interactive)
 mewsh edit <alias>     # Edit profile
 mewsh delete <alias>   # Delete profile
 mewsh list             # List profiles (table)
-mewsh connect <alias>  # Connect (blocking; opens terminal)
+mewsh connect <alias>           # Connect (blocking; opens terminal)
+mewsh connect <alias> -b        # Background (no GUI; survives shell exit)
+mewsh sessions                  # List active SSH sessions
+mewsh sessions kill <id>        # Stop a session
+mewsh sessions kill --alias <a> # Stop all sessions for a profile
+mewsh sessions kill --all       # Stop every session
 mewsh doctor           # Check ssh, terminal, cloudflared
 mewsh cloudflared update   # Download/update bundled cloudflared
 mewsh version          # Show version and install method
@@ -187,6 +192,18 @@ Opens a new terminal running native `ssh` to `host:port`.
 6. Tunnel stops only after the last SSH session ends
 
 TUI connect uses **detached** mode (returns to the profile list immediately). CLI `mewsh connect` blocks until SSH exits.
+
+### Background (`-b` / `--background`)
+
+For headless Linux servers (no desktop) or scripts, start SSH without a terminal emulator:
+
+```bash
+mewsh connect myserver --background
+```
+
+This spawns a detached **mewsh worker** in a new session (fully detached from your terminal on Windows). The worker keeps the Cloudflare tunnel alive (if needed), runs `ssh` without allocating a local TTY, and writes output to `<config_dir>/sessions/<alias>-<timestamp>.log`. Your shell returns immediately; the session keeps running after you log out of the server.
+
+Output and errors are appended to the log file path printed on start. List or stop sessions with `mewsh sessions` and `mewsh sessions kill`.
 
 ## Terminal spawning
 

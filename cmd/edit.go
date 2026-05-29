@@ -33,7 +33,7 @@ var editCmd = &cobra.Command{
 		if err := saveConfig(cfg); err != nil {
 			return err
 		}
-		printStatus(fmt.Sprintf("Profile %q updated.", updated.Alias))
+		printOK(fmt.Sprintf("Profile %q updated.", updated.Alias))
 		return nil
 	},
 }

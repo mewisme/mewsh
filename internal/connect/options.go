@@ -1,11 +1,17 @@
 package connect
 
-import "io"
+import (
+	"io"
+	"strings"
+
+	"github.com/mewisme/mewsh/internal/cliui"
+)
 
 type Options struct {
-	status   io.Writer
-	quiet    bool
-	detached bool
+	status     io.Writer
+	quiet      bool
+	detached   bool
+	background bool
 }
 
 type Option func(*Options)
@@ -34,9 +40,23 @@ func WithDetached(detached bool) Option {
 	}
 }
 
+// WithBackground starts a detached worker that runs SSH without a GUI terminal
+// and survives when the invoking shell exits (headless servers, scripts).
+func WithBackground(background bool) Option {
+	return func(o *Options) {
+		o.background = background
+	}
+}
+
 func (o Options) say(msg string) {
 	if o.quiet || o.status == nil {
 		return
 	}
-	_, _ = io.WriteString(o.status, msg)
+	msg = strings.TrimRight(msg, "\n")
+	if msg == "" {
+		return
+	}
+	for _, line := range strings.Split(msg, "\n") {
+		cliui.Line(o.status, cliui.LevelInfo, line)
+	}
 }

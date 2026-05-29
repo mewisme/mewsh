@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mewisme/mewsh/internal/cliui"
 	"github.com/mewisme/mewsh/internal/config"
 	"github.com/mewisme/mewsh/internal/tui"
 	"github.com/spf13/cobra"
@@ -57,6 +58,6 @@ func saveConfig(cfg *config.Config) error {
 }
 
 func exitErr(err error) {
-	fmt.Fprintln(os.Stderr, err)
+	cliui.Errf(os.Stderr, "%s", err)
 	os.Exit(1)
 }

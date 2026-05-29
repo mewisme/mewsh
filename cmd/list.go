@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/mewisme/mewsh/internal/cliui"
 	"github.com/spf13/cobra"
-)
-
-var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("69"))
 )
 
 var listCmd = &cobra.Command{
@@ -21,18 +17,19 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		if len(cfg.Profiles) == 0 {
-			fmt.Println("No profiles configured. Run `mewsh add` to create one.")
+			cliui.Info("No profiles configured. Run `mewsh add` to create one.")
 			return nil
 		}
-		fmt.Println(headerStyle.Render(fmt.Sprintf("%-16s %-24s %-8s %-10s %s", "ALIAS", "TARGET", "PORT", "AUTH", "NOTE")))
+		rows := make([][]string, 0, len(cfg.Profiles))
 		for _, p := range cfg.Profiles {
 			target := p.Host
 			if p.ConnectionType == "cloudflare_access" {
 				target = "cf:" + p.CFHostname
 			}
 			note := strings.ReplaceAll(p.Note, "\n", " ")
-			fmt.Printf("%-16s %-24s %-8d %-10s %s\n", p.Alias, target, p.Port, p.AuthType, note)
+			rows = append(rows, []string{p.Alias, target, strconv.Itoa(p.Port), p.AuthType, note})
 		}
+		cliui.PrintTable(cmd.OutOrStdout(), []string{"ALIAS", "TARGET", "PORT", "AUTH", "NOTE"}, rows)
 		return nil
 	},
 }

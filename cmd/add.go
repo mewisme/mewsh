@@ -27,7 +27,7 @@ var addCmd = &cobra.Command{
 		if err := saveConfig(cfg); err != nil {
 			return err
 		}
-		printStatus(fmt.Sprintf("Profile %q added.", p.Alias))
+		printOK(fmt.Sprintf("Profile %q added.", p.Alias))
 		return nil
 	},
 }

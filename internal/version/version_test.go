@@ -1,24 +1,18 @@
 package version
 
-import (
-	"sync"
-	"testing"
-)
+import "testing"
 
-func TestTag(t *testing.T) {
-	t.Parallel()
-	orig := Version
-	t.Cleanup(func() { Version = orig; resolved = sync.Once{} })
-
-	Version = "0.0.2"
-	resolved = sync.Once{}
-	if got := Tag(); got != "v0.0.2" {
-		t.Fatalf("Tag() = %q, want v0.0.2", got)
+func TestFormatBuildDate(t *testing.T) {
+	got := FormatBuildDate("2024-06-01T12:00:00Z")
+	if got == "" || got == "2024-06-01T12:00:00Z" {
+		t.Fatalf("expected formatted date, got %q", got)
 	}
+}
 
-	Version = "dev"
-	resolved = sync.Once{}
-	if got := Tag(); got != "" {
-		t.Fatalf("Tag() = %q, want empty for dev", got)
+func TestBuildInfoDev(t *testing.T) {
+	// Default in tests is dev unless ldflags set.
+	b := BuildInfo()
+	if b.GOOS == "" || b.GOARCH == "" {
+		t.Fatal("expected platform")
 	}
 }

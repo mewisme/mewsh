@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -189,12 +188,23 @@ func waitForProcessExit(pid int, timeout time.Duration) error {
 }
 
 func processExists(pid int) bool {
-	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
-	out, err := cmd.Output()
+	if pid <= 0 {
+		return false
+	}
+	const processQueryLimited = 0x1000
+	const stillActive = 259
+
+	h, err := syscall.OpenProcess(processQueryLimited, false, uint32(pid))
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(out), strconv.Itoa(pid))
+	defer syscall.CloseHandle(h)
+
+	var code uint32
+	if err := syscall.GetExitCodeProcess(h, &code); err != nil {
+		return true
+	}
+	return code == stillActive
 }
 
 func writeSSHBatch(argv []string) (string, error) {

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mewisme/mewsh/internal/cliui"
 	"github.com/mewisme/mewsh/internal/version"
 	"golang.org/x/mod/semver"
 )
@@ -70,16 +71,17 @@ func Run(checkOnly, force bool) error {
 	if err != nil {
 		return err
 	}
+	w := os.Stdout
 
 	if !result.Newer && !force {
-		fmt.Printf("mewsh is up to date (%s)\n", result.Current)
+		cliui.OKf(w, "mewsh is up to date (%s).", result.Current)
 		return nil
 	}
 
 	if result.Newer {
-		fmt.Printf("Update available: %s → %s (installed via %s)\n", result.Current, result.Latest, result.Info.Method)
+		cliui.Infof(w, "Update available: %s → %s (installed via %s).", result.Current, result.Latest, result.Info.Method.String())
 	} else if force {
-		fmt.Printf("Reinstalling %s (installed via %s)\n", result.Current, result.Info.Method)
+		cliui.Infof(w, "Reinstalling %s (installed via %s).", result.Current, result.Info.Method.String())
 	}
 
 	if checkOnly {
@@ -97,11 +99,12 @@ func Run(checkOnly, force bool) error {
 }
 
 func printUpdateHint(info InstallInfo) error {
+	w := os.Stdout
 	switch info.Method {
 	case InstallHomebrew, InstallGo:
-		fmt.Printf("Run: %s\n", UpdateCommand(info.Method))
+		cliui.Labeled(w, "run", UpdateCommand(info.Method))
 	default:
-		fmt.Println("Run: mewsh update")
+		cliui.Labeled(w, "run", "mewsh update")
 	}
 	return nil
 }
@@ -111,14 +114,15 @@ func runBrewUpgrade() error {
 	if err != nil {
 		return fmt.Errorf("brew not found in PATH")
 	}
-	fmt.Println("Running: brew upgrade mewsh")
+	w := os.Stdout
+	cliui.Info("Running: brew upgrade mewsh")
 	cmd := exec.Command(brew, "upgrade", "mewsh")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("brew upgrade: %w", err)
 	}
-	fmt.Println("Updated via Homebrew.")
+	cliui.OKf(w, "Updated via Homebrew.")
 	return nil
 }
 
@@ -140,7 +144,6 @@ func runGoInstall(releaseTag string, force bool) error {
 	moduleRef := goInstallModuleRef(releaseTag)
 	args := []string{"install"}
 	if force {
-		// Rebuild even when Go thinks deps are fresh; pair with GOPROXY=direct below.
 		args = append(args, "-a")
 	}
 	args = append(args, moduleRef)
@@ -153,14 +156,15 @@ func runGoInstall(releaseTag string, force bool) error {
 		cmd.Env = append(cmd.Env, "GOPROXY=direct")
 	}
 
-	fmt.Println("Running:", goBin, strings.Join(args, " "))
+	w := os.Stdout
+	cliui.Block(w, cliui.LevelCmd, goBin+" "+strings.Join(args, " "))
 	if force {
-		fmt.Println("Using GOPROXY=direct and -a to avoid cached module/build artifacts.")
+		cliui.Dim("Using GOPROXY=direct and -a to avoid cached module/build artifacts.")
 	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("go install: %w", err)
 	}
-	fmt.Println("Updated via go install. Ensure your GOBIN is on PATH.")
+	cliui.OKf(w, "Updated via go install. Ensure your GOBIN is on PATH.")
 	return nil
 }
 
@@ -174,7 +178,8 @@ func updateBinary(tag, dest string) error {
 		return err
 	}
 
-	fmt.Printf("Downloading %s...\n", filepath.Base(url))
+	w := os.Stdout
+	cliui.Infof(w, "Downloading %s...", filepath.Base(url))
 	data, err := download(url)
 	if err != nil {
 		return err
@@ -188,7 +193,7 @@ func updateBinary(tag, dest string) error {
 	if err := replaceExecutable(bin, dest); err != nil {
 		return err
 	}
-	fmt.Printf("Updated %s to %s\n", dest, tag)
+	cliui.OKf(w, "Updated %s to %s.", dest, tag)
 	return nil
 }
 

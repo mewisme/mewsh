@@ -119,6 +119,9 @@ func StartCloudflareAccessTunnel(ctx context.Context, cloudflaredPath, hostname 
 	var stderr bytes.Buffer
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.MultiWriter(io.Discard, &stderr)
+	if devNull, err := os.Open(os.DevNull); err == nil {
+		cmd.Stdin = devNull
+	}
 	setHiddenProcess(cmd)
 
 	if err := cmd.Start(); err != nil {

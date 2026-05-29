@@ -7,6 +7,6 @@ import (
 	"github.com/mewisme/mewsh/internal/profile"
 )
 
-func buildCloudflareProxyArgs(cfg *config.Config, p profile.Profile) ([]string, func(), error) {
-	return buildCloudflareSSHConfigArgs(cfg, p)
+func buildCloudflareProxyArgs(cfg *config.Config, p profile.Profile, o Options) ([]string, func(), error) {
+	return buildCloudflareSSHConfigArgs(cfg, p, o.background)
 }

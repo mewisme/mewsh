@@ -36,6 +36,10 @@ func Profile(cfg *config.Config, alias string, opts ...Option) error {
 		return err
 	}
 
+	if o.background {
+		return LaunchBackground(cfg, alias, o)
+	}
+
 	if p.ConnectionType == profile.ConnectionCloudflareAccess {
 		if o.detached {
 			return connectCloudflareDetached(cfg, *p, o)
@@ -46,14 +50,14 @@ func Profile(cfg *config.Config, alias string, opts ...Option) error {
 }
 
 func connectDirect(p profile.Profile) error {
-	argv, err := buildLaunchArgs(p, p.Host, p.Port)
+	argv, err := buildLaunchArgs(p, p.Host, p.Port, defaultOptions())
 	if err != nil {
 		return err
 	}
 	if err := detachedSpawn(p, argv); err != nil {
 		return err
 	}
-	sessionID := registerSSHSession(p.Alias, "", argv)
+	sessionID := registerSSHSession(p.Alias, "", argv, sessionDisplayTarget(p, p.Host, p.Port))
 	argvCopy := append([]string(nil), argv...)
 	go monitorDetachedSSH(sessionID, argvCopy)
 	return nil
@@ -66,13 +70,13 @@ func connectCloudflare(cfg *config.Config, p profile.Profile, o Options) error {
 		return err
 	}
 
-	argv, err := buildLaunchArgs(p, "127.0.0.1", tun.LocalPort)
+	argv, err := buildLaunchArgs(p, "127.0.0.1", tun.LocalPort, o)
 	if err != nil {
 		releaseSharedTunnel(hostname)
 		return err
 	}
 
-	sessionID := registerSSHSession(p.Alias, hostname, argv)
+	sessionID := registerSSHSession(p.Alias, hostname, argv, sessionDisplayTarget(p, "127.0.0.1", tun.LocalPort))
 	defer removeSSHSession(sessionID, false)
 
 	sigCh := make(chan os.Signal, 1)
@@ -103,7 +107,7 @@ func connectCloudflareDetached(cfg *config.Config, p profile.Profile, o Options)
 		return err
 	}
 
-	argv, err := buildLaunchArgs(p, "127.0.0.1", tun.LocalPort)
+	argv, err := buildLaunchArgs(p, "127.0.0.1", tun.LocalPort, o)
 	if err != nil {
 		releaseSharedTunnel(hostname)
 		return err
@@ -114,21 +118,21 @@ func connectCloudflareDetached(cfg *config.Config, p profile.Profile, o Options)
 		return err
 	}
 
-	sessionID := registerSSHSession(p.Alias, hostname, argv)
+	sessionID := registerSSHSession(p.Alias, hostname, argv, sessionDisplayTarget(p, "127.0.0.1", tun.LocalPort))
 	argvCopy := append([]string(nil), argv...)
 	go monitorDetachedSSH(sessionID, argvCopy)
 	return nil
 }
 
 func connectCloudflareDetachedProxy(cfg *config.Config, p profile.Profile) error {
-	argv, _, err := buildCloudflareProxyArgs(cfg, p)
+	argv, _, err := buildCloudflareProxyArgs(cfg, p, defaultOptions())
 	if err != nil {
 		return err
 	}
 	if err := detachedSpawn(p, argv); err != nil {
 		return err
 	}
-	sessionID := registerSSHSession(p.Alias, p.CFHostname, argv)
+	sessionID := registerSSHSession(p.Alias, p.CFHostname, argv, sessionDisplayTarget(p, "", 0))
 	argvCopy := append([]string(nil), argv...)
 	go monitorDetachedSSH(sessionID, argvCopy)
 	return nil
@@ -159,30 +163,32 @@ func startCloudflareTunnel(cfg *config.Config, hostname string, o Options) (*tun
 	return tun, cancel, nil
 }
 
-func buildLaunchArgs(p profile.Profile, host string, port int) ([]string, error) {
+func buildLaunchArgs(p profile.Profile, host string, port int, o Options) ([]string, error) {
 	if p.AuthType == profile.AuthPassword && p.PasswordMode == profile.PasswordAuto {
-		return buildAutoPasswordArgs(p, host, port)
+		return buildAutoPasswordArgs(p, host, port, o)
 	}
-	return p.BuildSSHArgs(host, port), nil
+	return p.BuildSSHArgs(host, port, o.background), nil
 }
 
-func buildAutoPasswordArgs(p profile.Profile, host string, port int) ([]string, error) {
+func buildAutoPasswordArgs(p profile.Profile, host string, port int, o Options) ([]string, error) {
 	if runtime.GOOS == "windows" {
 		// Password is supplied via SSH_ASKPASS in spawnExtraEnv.
-		return p.BuildSSHArgs(host, port), nil
+		return p.BuildSSHArgs(host, port, o.background), nil
 	}
 	pass, err := secret.GetPassword(p.PasswordRef)
 	if err != nil {
 		return nil, err
 	}
-	sshArgs := p.BuildSSHArgs(host, port)
+	sshArgs := p.BuildSSHArgs(host, port, o.background)
 
-	if expectPath, err := exec.LookPath("expect"); err == nil {
-		script, err := writeExpectScript(sshArgs, pass)
-		if err != nil {
-			return nil, err
+	if !o.background {
+		if expectPath, err := exec.LookPath("expect"); err == nil {
+			script, err := writeExpectScript(sshArgs, pass)
+			if err != nil {
+				return nil, err
+			}
+			return []string{expectPath, script}, nil
 		}
-		return []string{expectPath, script}, nil
 	}
 
 	if sshpassPath, err := exec.LookPath("sshpass"); err == nil {
@@ -196,6 +202,9 @@ func buildAutoPasswordArgs(p profile.Profile, host string, port int) ([]string, 
 		return []string{"/bin/sh", script}, nil
 	}
 
+	if o.background {
+		return nil, fmt.Errorf("background connect with auto password requires sshpass (expect would attach to your terminal)")
+	}
 	return nil, fmt.Errorf("auto password requires expect or sshpass; use manual mode")
 }
 

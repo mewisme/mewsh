@@ -16,7 +16,7 @@ import (
 
 var sshConfigHostSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
-func buildCloudflareSSHConfigArgs(cfg *config.Config, p profile.Profile) ([]string, func(), error) {
+func buildCloudflareSSHConfigArgs(cfg *config.Config, p profile.Profile, background bool) ([]string, func(), error) {
 	cfPath, err := cloudflared.ResolvePathForConnect(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -27,7 +27,7 @@ func buildCloudflareSSHConfigArgs(cfg *config.Config, p profile.Profile) ([]stri
 	}
 
 	hostAlias := sshConfigHostAlias(p.Alias)
-	content := renderCloudflareSSHConfig(p, cfPath, hostAlias)
+	content := renderCloudflareSSHConfig(p, cfPath, hostAlias, background)
 
 	path, err := writeSSHConfigFile(p.Alias, content)
 	if err != nil {
@@ -35,7 +35,10 @@ func buildCloudflareSSHConfigArgs(cfg *config.Config, p profile.Profile) ([]stri
 	}
 
 	// Config must outlive this function — detached ssh starts after we return.
-	argv := []string{"ssh", "-F", path, hostAlias}
+	argv := []string{"ssh", "-n", "-T", "-F", path, hostAlias}
+	if !background {
+		argv = []string{"ssh", "-F", path, hostAlias}
+	}
 	return argv, nil, nil
 }
 
@@ -70,7 +73,7 @@ func sshConfigHostAlias(alias string) string {
 	return "mewsh-" + safe
 }
 
-func renderCloudflareSSHConfig(p profile.Profile, cfPath, hostAlias string) string {
+func renderCloudflareSSHConfig(p profile.Profile, cfPath, hostAlias string, background bool) string {
 	p.ApplyDefaults()
 	port := p.Port
 	if port == 0 {
@@ -86,7 +89,11 @@ func renderCloudflareSSHConfig(p profile.Profile, cfPath, hostAlias string) stri
 	b.WriteString("  GSSAPIAuthentication no\n")
 	b.WriteString("  ConnectTimeout 30\n")
 	b.WriteString("  StrictHostKeyChecking accept-new\n")
-	b.WriteString("  RequestTTY force\n")
+	if background {
+		b.WriteString("  RequestTTY no\n")
+	} else {
+		b.WriteString("  RequestTTY force\n")
+	}
 
 	if p.AuthType == profile.AuthPassword {
 		b.WriteString("  PreferredAuthentications keyboard-interactive,password\n")

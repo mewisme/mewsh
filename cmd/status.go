@@ -2,10 +2,9 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
-	"os"
 
 	"github.com/charmbracelet/huh"
+	"github.com/mewisme/mewsh/internal/cliui"
 )
 
 var errFormCancelled = errors.New("form cancelled")
@@ -25,5 +24,9 @@ func wrapFormErr(err error) error {
 }
 
 func printStatus(msg string) {
-	fmt.Fprintln(os.Stderr, msg)
+	cliui.Info(msg)
+}
+
+func printOK(msg string) {
+	cliui.OK(msg)
 }

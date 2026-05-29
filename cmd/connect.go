@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var connectBackground bool
+
 var connectCmd = &cobra.Command{
 	Use:   "connect <alias>",
 	Short: "Connect to an SSH profile",
@@ -14,10 +16,16 @@ var connectCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return connect.Profile(cfg, args[0])
+		opts := []connect.Option{}
+		if connectBackground {
+			opts = append(opts, connect.WithBackground(true))
+		}
+		return connect.Profile(cfg, args[0], opts...)
 	},
 }
 
 func init() {
+	connectCmd.Flags().BoolVarP(&connectBackground, "background", "b", false,
+		"Run SSH in the background without a GUI terminal; survives when your shell exits (headless servers)")
 	rootCmd.AddCommand(connectCmd)
 }

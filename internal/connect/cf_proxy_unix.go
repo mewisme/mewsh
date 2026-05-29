@@ -10,12 +10,12 @@ import (
 	"github.com/mewisme/mewsh/internal/profile"
 )
 
-func buildCloudflareProxyArgs(cfg *config.Config, p profile.Profile) ([]string, func(), error) {
+func buildCloudflareProxyArgs(cfg *config.Config, p profile.Profile, o Options) ([]string, func(), error) {
 	proxy, err := cloudflareProxyCommand(cfg, p.CFHostname)
 	if err != nil {
 		return nil, nil, err
 	}
-	argv, err := buildLaunchArgs(p, p.CFHostname, p.Port)
+	argv, err := buildLaunchArgs(p, p.CFHostname, p.Port, o)
 	if err != nil {
 		return nil, nil, err
 	}

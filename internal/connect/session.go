@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
@@ -20,6 +21,7 @@ type SessionInfo struct {
 	Hostname string
 	Target   string
 	PID      int
+	LogPath  string `json:"log_path,omitempty"`
 }
 
 type sharedTunnel struct {
@@ -33,6 +35,7 @@ type sshSession struct {
 	id           string
 	alias        string
 	hostname     string
+	target       string
 	sshPID       int
 	sshArgv      []string
 	registeredAt time.Time
@@ -117,27 +120,45 @@ func releaseSharedTunnel(hostname string) {
 	}
 }
 
-func registerSSHSession(alias, hostname string, argv []string) string {
-	id := fmt.Sprintf("%s-%d", alias, time.Now().UnixNano())
+func registerSSHSession(alias, hostname string, argv []string, displayTarget string) string {
+	id := os.Getenv(sessionIDEnv)
+	if id == "" {
+		id = newSessionID(alias)
+	}
+	if displayTarget == "" {
+		host, port := terminal.SSHProcessMarkers(argv)
+		displayTarget = host
+		if port != "" {
+			displayTarget = fmt.Sprintf("%s:%s", host, port)
+		}
+	}
 	argvCopy := append([]string(nil), argv...)
-	sshMu.Lock()
-	sshSessions[id] = &sshSession{
+	s := &sshSession{
 		id:           id,
 		alias:        alias,
 		hostname:     hostname,
+		target:       displayTarget,
 		sshArgv:      argvCopy,
 		registeredAt: time.Now(),
 	}
+	sshMu.Lock()
+	sshSessions[id] = s
 	sshMu.Unlock()
+	persistFromSSHSession(s)
 	return id
 }
 
 func setSSHSessionPID(id string, pid int) {
 	sshMu.Lock()
-	if s, ok := sshSessions[id]; ok && pid > 0 {
-		s.sshPID = pid
+	var s *sshSession
+	if cur, ok := sshSessions[id]; ok && pid > 0 {
+		cur.sshPID = pid
+		s = cur
 	}
 	sshMu.Unlock()
+	if s != nil {
+		persistFromSSHSession(s)
+	}
 }
 
 func removeSSHSession(id string, kill bool) {
@@ -153,6 +174,11 @@ func removeSSHSession(id string, kill bool) {
 		waitSessionSSHExit(s)
 	}
 	releaseSharedTunnel(s.hostname)
+	// Natural exit: keep the registry row until sessionStorePrune (spawn grace) so
+	// `mewsh sessions` still lists it briefly; explicit kill removes immediately.
+	if kill {
+		sessionStoreRemove(id)
+	}
 }
 
 func waitSessionSSHExit(s *sshSession) {
@@ -243,6 +269,10 @@ func CleanupActive() {
 			_ = st.tun.Close()
 		}
 	}
+	for _, s := range sessionStoreList() {
+		killStoredSession(s)
+	}
+	sessionStoreClear()
 }
 
 // CleanupAlias kills all SSH sessions for a profile alias (tunnel stays if other aliases share it).
@@ -364,13 +394,31 @@ func ActiveSessionCount() int {
 	return len(sshSessions)
 }
 
-// ListSessions returns active SSH sessions managed by mewsh. Non-blocking for the TUI.
+// ListSessions returns active SSH sessions managed by mewsh (in-process and on disk).
 func ListSessions() []SessionInfo {
+	pruneStaleSessions()
+	sessionStorePrune()
+
+	byID := map[string]SessionInfo{}
+
 	sshMu.Lock()
-	defer sshMu.Unlock()
-	out := make([]SessionInfo, 0, len(sshSessions))
 	for _, s := range sshSessions {
-		out = append(out, sessionInfoFrom(s))
+		byID[s.id] = enrichSessionInfo(sessionInfoFrom(s))
+	}
+	sshMu.Unlock()
+
+	for _, s := range sessionStoreList() {
+		if _, ok := byID[s.ID]; ok {
+			continue
+		}
+		if shouldListStoredSession(s) {
+			byID[s.ID] = infoFromStored(s)
+		}
+	}
+
+	out := make([]SessionInfo, 0, len(byID))
+	for _, info := range byID {
+		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Alias != out[j].Alias {
@@ -382,10 +430,13 @@ func ListSessions() []SessionInfo {
 }
 
 func sessionInfoFrom(s *sshSession) SessionInfo {
-	host, port := terminal.SSHProcessMarkers(s.sshArgv)
-	target := host
-	if port != "" {
-		target = fmt.Sprintf("%s:%s", host, port)
+	target := s.target
+	if target == "" {
+		host, port := terminal.SSHProcessMarkers(s.sshArgv)
+		target = host
+		if port != "" {
+			target = fmt.Sprintf("%s:%s", host, port)
+		}
 	}
 	return SessionInfo{
 		ID:       s.id,
@@ -407,16 +458,50 @@ func ActiveSessionsByAlias() map[string]int {
 	return counts
 }
 
-// KillSession stops one session by id.
-func KillSession(id string) {
-	removeSSHSession(id, true)
+// KillSession stops one session by id (in-process or persisted).
+func KillSession(id string) error {
+	sshMu.Lock()
+	_, inMem := sshSessions[id]
+	sshMu.Unlock()
+	if inMem {
+		removeSSHSession(id, true)
+		return nil
+	}
+	rec, err := sessionStoreGet(id)
+	if err != nil {
+		return err
+	}
+	if rec == nil {
+		return fmt.Errorf("session %q not found", id)
+	}
+	killStoredSession(*rec)
+	sessionStoreRemove(id)
+	return nil
 }
 
 // KillSessions stops multiple sessions by id.
-func KillSessions(ids []string) {
+func KillSessions(ids []string) error {
+	var first error
 	for _, id := range ids {
-		removeSSHSession(id, true)
+		if err := KillSession(id); err != nil && first == nil {
+			first = err
+		}
 	}
+	return first
+}
+
+// KillSessionsByAlias stops every tracked session for a profile alias.
+func KillSessionsByAlias(alias string) error {
+	var ids []string
+	for _, s := range ListSessions() {
+		if s.Alias == alias {
+			ids = append(ids, s.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return fmt.Errorf("no active sessions for profile %q", alias)
+	}
+	return KillSessions(ids)
 }
 
 // KillAllSessions stops every tracked SSH session and shared tunnels.
