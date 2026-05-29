@@ -22,9 +22,9 @@ var versionCmd = &cobra.Command{
 			}
 		}
 		if check, err := selfupdate.Check(); err == nil && check.Newer {
-			fmt.Printf("latest: %s (update available — run `mewsh update`)\n", check.Latest)
+			fmt.Printf("version latest: %s (update available — run `mewsh update`)\n", check.Latest)
 		} else if err == nil && check.Latest != "" {
-			fmt.Printf("latest: %s\n", check.Latest)
+			fmt.Printf("version latest: %s\n", check.Latest)
 		}
 		return nil
 	},

@@ -65,18 +65,22 @@ func isNewer(latest, current string) bool {
 }
 
 // Run updates mewsh using the best method for how it was installed.
-func Run(checkOnly bool) error {
+func Run(checkOnly, force bool) error {
 	result, err := Check()
 	if err != nil {
 		return err
 	}
 
-	if !result.Newer {
+	if !result.Newer && !force {
 		fmt.Printf("mewsh is up to date (%s)\n", result.Current)
 		return nil
 	}
 
-	fmt.Printf("Update available: %s → %s (installed via %s)\n", result.Current, result.Latest, result.Info.Method)
+	if result.Newer {
+		fmt.Printf("Update available: %s → %s (installed via %s)\n", result.Current, result.Latest, result.Info.Method)
+	} else if force {
+		fmt.Printf("Reinstalling %s (installed via %s)\n", result.Current, result.Info.Method)
+	}
 
 	if checkOnly {
 		return printUpdateHint(result.Info)
@@ -86,7 +90,7 @@ func Run(checkOnly bool) error {
 	case InstallHomebrew:
 		return runBrewUpgrade()
 	case InstallGo:
-		return runGoInstall()
+		return runGoInstall(result.Latest, force)
 	default:
 		return updateBinary(result.Latest, result.Info.Exe)
 	}
@@ -118,15 +122,41 @@ func runBrewUpgrade() error {
 	return nil
 }
 
-func runGoInstall() error {
+func goInstallModuleRef(releaseTag string) string {
+	if releaseTag == "" {
+		return "github.com/mewisme/mewsh@latest"
+	}
+	if !strings.HasPrefix(releaseTag, "v") {
+		releaseTag = "v" + releaseTag
+	}
+	return "github.com/mewisme/mewsh@" + releaseTag
+}
+
+func runGoInstall(releaseTag string, force bool) error {
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		return fmt.Errorf("go not found in PATH")
 	}
-	fmt.Println("Running: go install github.com/mewisme/mewsh@latest")
-	cmd := exec.Command(goBin, "install", "github.com/mewisme/mewsh@latest")
+	moduleRef := goInstallModuleRef(releaseTag)
+	args := []string{"install"}
+	if force {
+		// Rebuild even when Go thinks deps are fresh; pair with GOPROXY=direct below.
+		args = append(args, "-a")
+	}
+	args = append(args, moduleRef)
+
+	cmd := exec.Command(goBin, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Env = os.Environ()
+	if force {
+		cmd.Env = append(cmd.Env, "GOPROXY=direct")
+	}
+
+	fmt.Println("Running:", goBin, strings.Join(args, " "))
+	if force {
+		fmt.Println("Using GOPROXY=direct and -a to avoid cached module/build artifacts.")
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("go install: %w", err)
 	}

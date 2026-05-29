@@ -101,7 +101,7 @@ func UpdateCommand(method InstallMethod) string {
 	case InstallHomebrew:
 		return "brew upgrade mewsh"
 	case InstallGo:
-		return "go install github.com/mewisme/mewsh@latest"
+		return "mewsh update"
 	default:
 		return ""
 	}
