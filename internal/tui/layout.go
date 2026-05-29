@@ -11,7 +11,7 @@ import (
 const (
 	defaultTermWidth  = 80
 	defaultTermHeight = 24
-	headerTitle       = "MewSH"
+	headerTitle       = "mewsh"
 	headerSubtitle    = "Manage SSH credentials and connect servers."
 )
 
@@ -97,6 +97,8 @@ func (m *Model) listBottomBar() string {
 		} else {
 			status = "Connecting…"
 		}
+	} else if m.quitEscPending {
+		status = "Press esc again to quit"
 	}
 	return listBottomBar(w, m.list, len(m.cfg.Profiles), m.menuOpen, connect.ActiveSessionCount(), status)
 }

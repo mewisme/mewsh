@@ -9,7 +9,7 @@ import (
 )
 
 // WindowTitle is the OS terminal window title (not the in-app TUI header).
-const WindowTitle = "MewSH"
+const WindowTitle = "mewsh"
 
 func SpawnDetached(argv []string) error {
 	return SpawnDetachedEnv(argv, nil)

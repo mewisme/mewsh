@@ -25,7 +25,8 @@ func listFooterBindings() []footerBinding {
 		{"/", "filter"},
 		{"enter", "connect"},
 		{"m", "menu"},
-		{"q", "quit"},
+		{"esc/q", "quit"},
+		{"?", "more"},
 	}
 }
 
@@ -43,16 +44,10 @@ func formFooterBindings() []footerBinding {
 	return []footerBinding{
 		{"enter", "next"},
 		{"esc", "cancel"},
+		{"tab", "next field"},
+		{"shift+tab", "prev field"},
 		{"↑/k", "up"},
 		{"↓/j", "down"},
-	}
-}
-
-func confirmFooterBindings() []footerBinding {
-	return []footerBinding{
-		{"y", "confirm"},
-		{"n", "cancel"},
-		{"esc", "cancel"},
 	}
 }
 
@@ -105,14 +100,16 @@ func formBottomBar(w int, step, total int) string {
 	return renderBottomBar(w, formFooterBindings(), status)
 }
 
-func confirmBottomBar(w int, alias string) string {
-	return renderBottomBar(w, confirmFooterBindings(), fmt.Sprintf("Delete profile %q?", alias))
+func confirmBottomBar(w int, alias string, defaultYes bool) string {
+	status := fmt.Sprintf("Delete profile %q? %s", alias, confirmYNPrompt(defaultYes))
+	return renderBottomBar(w, confirmFooterBindings(defaultYes), status)
 }
 
-func killConfirmBottomBar(w int, prompt string) string {
-	status := prompt
-	if idx := strings.Index(prompt, " (y/n)"); idx >= 0 {
-		status = prompt[:idx] + "?"
-	}
-	return renderBottomBar(w, confirmFooterBindings(), status)
+func quitConfirmBottomBar(w int) string {
+	status := "Quit mewsh? " + confirmYNPrompt(true)
+	return renderBottomBar(w, confirmFooterBindings(true), status)
+}
+
+func killConfirmBottomBar(w int, prompt string, defaultYes bool) string {
+	return renderBottomBar(w, confirmFooterBindings(defaultYes), prompt)
 }

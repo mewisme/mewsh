@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mewisme/mewsh/internal/config"
@@ -21,8 +20,11 @@ const (
 	screenForm
 	screenConfirmDelete
 	screenConfirmKillSessions
+	screenConfirmQuit
 	screenSessions
 )
+
+const quitDoublePressWindow = 450 * time.Millisecond
 
 type Model struct {
 	cfg               *config.Config
@@ -39,6 +41,10 @@ type Model struct {
 	connectingAlias   string
 	menuOpen          bool
 	quitting          bool
+	quitEscPending    bool
+	lastEscPress      time.Time
+	helpOpen          bool
+	helpPage          int
 	width             int
 	height            int
 }
@@ -87,6 +93,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case tea.KeyMsg:
+		if msg.String() == "?" {
+			if m.helpOpen {
+				m.helpOpen = false
+			} else {
+				m.helpOpen = true
+				m.helpPage = 0
+				m.quitEscPending = false
+				m.lastEscPress = time.Time{}
+			}
+			return m, m.refreshLayout()
+		}
+		if m.helpOpen {
+			switch msg.String() {
+			case "esc":
+				m.helpOpen = false
+				return m, m.refreshLayout()
+			case "left", "h", "pgup":
+				m.helpPrev()
+				return m, m.refreshLayout()
+			case "right", "l", "pgdown":
+				m.helpNext()
+				return m, m.refreshLayout()
+			}
+			return m, nil
+		}
 		if m.screen == screenSessions && !m.sessions.filterInputActive() {
 			switch msg.String() {
 			case "esc", "m":
@@ -95,15 +126,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.refreshLayout()
 			}
 		}
-		if m.screen == screenList && !m.list.filterInputActive() {
-			switch {
-			case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+c", "q", "esc"))):
-				m.connecting = false
-				connect.CleanupActive()
-				m.quitting = true
-				return m, tea.Quit
-			}
+	case quitEscHintExpireMsg:
+		m.quitEscPending = false
+		m.lastEscPress = time.Time{}
+		if m.screen == screenList {
+			return m, m.refreshLayout()
 		}
+		return m, nil
 	case sessionSyncMsg:
 		if m.quitting {
 			return m, nil
@@ -145,11 +174,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConfirmDelete(msg)
 	case screenConfirmKillSessions:
 		return m.updateConfirmKillSessions(msg)
+	case screenConfirmQuit:
+		return m.updateConfirmQuit(msg)
 	case screenSessions:
 		return m.updateSessions(msg)
 	}
 	return m, nil
 }
+
+func (m Model) quitNow() (tea.Model, tea.Cmd) {
+	m.connecting = false
+	m.quitEscPending = false
+	m.lastEscPress = time.Time{}
+	connect.CleanupActive()
+	m.quitting = true
+	return m, tea.Quit
+}
+
+func quitEscHintExpireCmd() tea.Cmd {
+	return tea.Tick(quitDoublePressWindow, func(time.Time) tea.Msg { return quitEscHintExpireMsg{} })
+}
+
+type quitEscHintExpireMsg struct{}
 
 func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// While typing a filter (including after opening the menu first), let the list
@@ -162,7 +208,22 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
+		case "ctrl+c", "q":
+			m.quitEscPending = false
+			m.lastEscPress = time.Time{}
+			m.screen = screenConfirmQuit
+			return m, m.refreshLayout()
+		case "esc":
+			now := time.Now()
+			if m.quitEscPending && !m.lastEscPress.IsZero() && now.Sub(m.lastEscPress) <= quitDoublePressWindow {
+				return m.quitNow()
+			}
+			m.quitEscPending = true
+			m.lastEscPress = now
+			return m, tea.Batch(m.refreshLayout(), quitEscHintExpireCmd())
 		case "m":
+			m.quitEscPending = false
+			m.lastEscPress = time.Time{}
 			m.menuOpen = !m.menuOpen
 			m.syncListSize()
 			return m, m.refreshLayout()
@@ -271,10 +332,30 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m Model) updateConfirmQuit(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		ok, cancel, handled := confirmKey(keyMsg.String(), true)
+		if !handled {
+			return m, nil
+		}
+		if ok {
+			return m.quitNow()
+		}
+		if cancel {
+			m.screen = screenList
+			return m, m.refreshLayout()
+		}
+	}
+	return m, nil
+}
+
 func (m Model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "y", "Y":
+		ok, cancel, handled := confirmKey(keyMsg.String(), false)
+		if !handled {
+			return m, nil
+		}
+		if ok {
 			cfg := *m.cfg
 			idx := findIndex(cfg.Profiles, m.confirmAlias)
 			if idx >= 0 {
@@ -291,7 +372,8 @@ func (m Model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = screenList
 			return m, m.refreshLayout()
-		case "n", "N", "esc":
+		}
+		if cancel {
 			m.screen = screenList
 			return m, m.refreshLayout()
 		}
@@ -301,8 +383,11 @@ func (m Model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateConfirmKillSessions(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
-		case "y", "Y":
+		ok, cancel, handled := confirmKey(keyMsg.String(), false)
+		if !handled {
+			return m, nil
+		}
+		if ok {
 			if m.confirmKillAll {
 				connect.KillAllSessions()
 				m.sessions.marked = map[string]bool{}
@@ -319,7 +404,8 @@ func (m Model) updateConfirmKillSessions(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncSessionsSize()
 			m.screen = screenSessions
 			return m, m.refreshLayout()
-		case "n", "N", "esc":
+		}
+		if cancel {
 			m.confirmKillAll = false
 			m.confirmKillIDs = nil
 			m.confirmKillPrompt = ""
@@ -334,11 +420,11 @@ func killSessionsConfirmPrompt(s sessionsListModel, ids []string) string {
 	if len(ids) == 1 {
 		for _, it := range s.items {
 			if it.info.ID == ids[0] {
-				return fmt.Sprintf("Kill session %q? (y/n)", it.info.Alias)
+				return fmt.Sprintf("Kill session %q? %s", it.info.Alias, confirmYNPrompt(false))
 			}
 		}
 	}
-	return fmt.Sprintf("Kill %d session(s)? (y/n)", len(ids))
+	return fmt.Sprintf("Kill %d session(s)? %s", len(ids), confirmYNPrompt(false))
 }
 
 func (m Model) updateSessions(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -359,7 +445,7 @@ func (m Model) updateSessions(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.confirmKillAll = true
 			m.confirmKillIDs = nil
-			m.confirmKillPrompt = fmt.Sprintf("Kill all %d session(s)? (y/n)", len(m.sessions.items))
+			m.confirmKillPrompt = fmt.Sprintf("Kill all %d session(s)? %s", len(m.sessions.items), confirmYNPrompt(false))
 			m.screen = screenConfirmKillSessions
 			return m, nil
 		case "enter":
@@ -390,6 +476,9 @@ func (m Model) View() string {
 		return ""
 	}
 	w, h := clampDims(m.width, m.height)
+	if m.helpOpen {
+		return layoutHelpScreen(w, h, m.helpPage)
+	}
 	errMsg := ""
 	if m.err != nil {
 		errMsg = m.err.Error()
@@ -401,13 +490,18 @@ func (m Model) View() string {
 		body := lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, m.form.View())
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenConfirmDelete:
-		bottom := confirmBottomBar(w, m.confirmAlias)
-		body := confirmStyle.Width(max(40, w-8)).Render(fmt.Sprintf("Delete profile %q? (y/n)", m.confirmAlias))
+		bottom := confirmBottomBar(w, m.confirmAlias, false)
+		body := confirmStyle.Width(max(40, w-8)).Render(fmt.Sprintf("Delete profile %q? %s", m.confirmAlias, confirmYNPrompt(false)))
 		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenConfirmKillSessions:
-		bottom := killConfirmBottomBar(w, m.confirmKillPrompt)
+		bottom := killConfirmBottomBar(w, m.confirmKillPrompt, false)
 		body := confirmStyle.Width(max(40, w-8)).Render(m.confirmKillPrompt)
+		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
+		return layoutScreen(w, h, body, bottom, errMsg)
+	case screenConfirmQuit:
+		bottom := quitConfirmBottomBar(w)
+		body := confirmStyle.Width(max(40, w-8)).Render("Quit mewsh? " + confirmYNPrompt(true))
 		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenSessions:

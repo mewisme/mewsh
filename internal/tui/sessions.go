@@ -172,5 +172,6 @@ func sessionsFooterBindings() []footerBinding {
 		{"enter", "kill"},
 		{"a", "kill all"},
 		{"m", "back"},
+		{"?", "help"},
 	}
 }
