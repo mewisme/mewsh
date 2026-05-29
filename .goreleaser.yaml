@@ -1,0 +1,79 @@
+version: 2
+
+project_name: mewsh
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: mewsh
+    main: .
+    binary: mewsh
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+    ldflags:
+      - -s -w
+      - -X github.com/mewisme/mewsh/internal/version.Version={{.Version}}
+      - -X github.com/mewisme/mewsh/internal/version.Commit={{.Commit}}
+      - -X github.com/mewisme/mewsh/internal/version.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+brews:
+  - name: mewsh
+    ids:
+      - mewsh
+    repository:
+      owner: mewisme
+      name: mewsh
+      branch: main
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/mewisme/mewsh"
+    description: "SSH profile manager with CLI and TUI"
+    license: MIT
+    skip_upload: auto
+    install: |
+      bin.install "mewsh"
+    test: |
+      system "#{bin}/mewsh", "--help"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    commit_msg_template: "brew: update {{ .ProjectName }} formula to {{ .Tag }}"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: mewisme
+    name: mewsh
+  prerelease: auto

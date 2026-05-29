@@ -1,0 +1,231 @@
+# MewSH
+
+SSH profile manager with a terminal UI and CLI. Save hosts, users, and auth settings in JSON; store passwords in the OS keyring; launch the **native OpenSSH client** in a separate terminal window.
+
+## Features
+
+- **TUI** — profile list, filter, connect, add/edit/delete via menu
+- **CLI** — scriptable `add`, `list`, `edit`, `delete`, `connect`, `doctor`
+- **Direct SSH** — spawn `ssh` to host:port
+- **Cloudflare Access** — shared `cloudflared` tunnel per hostname, multiple SSH sessions per tunnel
+- **Session manager** — list, kill, and kill-all with confirmation
+- **Passwords** — OS keyring (`mewsh` service); never stored in `config.json`
+- **Auto password** (Linux/macOS) — `expect` or `sshpass` when configured
+
+## Install
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap mewisme/mewsh
+brew install mewsh
+```
+
+After the first tagged release, GoReleaser updates `Formula/mewsh.rb` in this repo automatically.
+
+### Releases
+
+Download a binary from [GitHub Releases](https://github.com/mewisme/mewsh/releases), or install with Go:
+
+```bash
+go install github.com/mewisme/mewsh@latest
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/mewisme/mewsh.git
+cd mewsh
+go build -o mewsh .
+```
+
+## Quick start
+
+```bash
+# Interactive TUI (default)
+mewsh
+
+# Or use the CLI
+mewsh add
+mewsh list
+mewsh connect myserver
+```
+
+## Configuration
+
+| Platform | Config file |
+|----------|-------------|
+| Linux / macOS | `~/.config/mewsh/config.json` |
+| Windows | `%APPDATA%\mewsh\config.json` |
+
+Override path:
+
+```bash
+mewsh --config /path/to/config.json
+```
+
+| Path | Purpose |
+|------|---------|
+| `<config_dir>/config.json` | Profiles and settings |
+| `<config_dir>/bin/cloudflared(.exe)` | Bundled cloudflared (after `mewsh cloudflared update`) |
+
+Config directory is created with restrictive permissions on Unix. Passwords use the system keyring only.
+
+## Commands
+
+```bash
+mewsh                  # TUI (default)
+mewsh --help           # CLI help
+
+mewsh add              # Add profile (interactive)
+mewsh edit <alias>     # Edit profile
+mewsh delete <alias>   # Delete profile
+mewsh list             # List profiles (table)
+mewsh connect <alias>  # Connect (blocking; opens terminal)
+mewsh doctor           # Check ssh, terminal, cloudflared
+mewsh cloudflared update   # Download/update bundled cloudflared
+mewsh version          # Show version and install method
+mewsh update           # Update to latest release
+mewsh update --check # Only check for updates
+```
+
+Global flag: `--config <path>` — custom config file location.
+
+### Self-update
+
+`mewsh update` detects how you installed mewsh and picks the right path:
+
+| Install method | Update action |
+|----------------|---------------|
+| **Homebrew** (`brew tap mewisme/mewsh`) | `brew upgrade mewsh` |
+| **go install** | `go install github.com/mewisme/mewsh@latest` |
+| **Binary** (release download) | Downloads from GitHub Releases and replaces the executable |
+
+`mewsh version` prints the current version, platform, install method, and whether a newer release exists.
+
+## TUI
+
+```bash
+mewsh
+```
+
+### Profile list
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k`, `↓` / `j` | Move selection |
+| `/` | Filter profiles |
+| `Enter` | Connect (detached SSH in new terminal) |
+| `m` | Open menu |
+| `q`, `Esc`, `Ctrl+C` | Quit |
+
+### Menu (`m`)
+
+| Key | Action |
+|-----|--------|
+| `a` | Add profile |
+| `e` | Edit selected profile |
+| `d` | Delete selected profile (confirm) |
+| `s` | Active sessions |
+| `m` | Close menu |
+
+Footer shows live **Active sessions** count when SSH sessions are running.
+
+### Sessions (`m` → `s`)
+
+| Key | Action |
+|-----|--------|
+| `Space` | Mark session |
+| `Enter` | Kill selected / marked (confirm) |
+| `a` | Kill all sessions (confirm) |
+| `m` / `Esc` | Back to profiles |
+
+## Profile fields
+
+| Field | Description |
+|-------|-------------|
+| `alias` | Unique name (required) |
+| `connection_type` | `direct` or `cloudflare_access` |
+| `host` | Required for direct SSH |
+| `port` | Default `22` |
+| `user` | SSH username (required) |
+| `auth_type` | `agent`, `key`, or `password` |
+| `key_path` | Required when `auth_type` is `key` |
+| `password_mode` | `manual` (default) or `auto` |
+| `password_ref` | Keyring key (defaults to alias) |
+| `cf_hostname` | Required for Cloudflare Access |
+| `note` | Optional note |
+
+## Authentication
+
+| Type | Behavior |
+|------|----------|
+| `agent` | `ssh user@host` (SSH agent) |
+| `key` | `ssh -i <key_path> user@host` |
+| `password` + `manual` | Native `ssh`; password at prompt |
+| `password` + `auto` | `expect` or `sshpass` (Linux/macOS only; not Windows) |
+
+## Connect behavior
+
+### Direct
+
+Opens a new terminal running native `ssh` to `host:port`.
+
+### Cloudflare Access
+
+1. Resolve `cloudflared` (bundled → `PATH` → download via `mewsh cloudflared update`)
+2. Start a local tunnel: `cloudflared access ssh --hostname <cf_hostname> --url 127.0.0.1:<port>`
+3. Wait until the port is ready
+4. Open SSH to `127.0.0.1:<local_port>` in a new terminal
+5. **Shared tunnel** — multiple profiles/sessions to the same `cf_hostname` reuse one tunnel (ref-counted)
+6. Tunnel stops only after the last SSH session ends
+
+TUI connect uses **detached** mode (returns to the profile list immediately). CLI `mewsh connect` blocks until SSH exits.
+
+## Terminal spawning
+
+Spawned windows use the title **MewSH** where the platform allows it.
+
+| Platform | Launchers (in order) |
+|----------|----------------------|
+| Windows | Batch helper → Windows Terminal (`wt`) → `cmd` |
+| macOS | Terminal.app (`osascript`) |
+| Linux | `$TERMINAL`, gnome-terminal, konsole, kitty, alacritty, wezterm, xterm, … |
+
+If spawning fails, the full `ssh` command is printed so you can run it manually.
+
+## Releases (maintainers)
+
+Tag a version to trigger GoReleaser:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The [Release](.github/workflows/release.yml) workflow will:
+
+- Build Linux, macOS, and Windows binaries (amd64, arm64, and 386 for Linux/Windows)
+- Publish GitHub release archives and checksums
+- Commit an updated Homebrew formula to `Formula/mewsh.rb` on `main`
+
+[CI](.github/workflows/ci.yml) runs tests on push/PR.
+
+**Note:** The release job needs permission to push to `main` (for the formula commit). The default `GITHUB_TOKEN` in the workflow is sufficient when the formula lives in this repository.
+
+## Requirements
+
+- [OpenSSH](https://www.openssh.com/) client (`ssh` in `PATH`)
+- For Cloudflare Access: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) (bundled download supported)
+- For password auto mode on Unix: `expect` or `sshpass`
+
+## Security
+
+- Passwords only in the OS keyring, not in `config.json`
+- Config file mode `0600` on Unix
+- SSH/cloudflared invoked with argument slices where possible
+- Alias uniqueness and port validation enforced
+
+## License
+
+MIT — see [LICENSE](LICENSE).

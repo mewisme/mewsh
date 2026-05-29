@@ -1,0 +1,43 @@
+# Binaries
+/mewsh
+/mewsh.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build & release
+/bin/
+/dist/
+/build/
+*.test
+*.out
+coverage.*
+*.prof
+
+# Go
+/vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & local tools
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cursor / codegraph (local only)
+.cursor/
+.codegraph/
+
+# Secrets & local config (never commit)
+.env
+.env.*
+config.local.json
+
+# Goreleaser
+.goreleaser.snapshot.yaml
