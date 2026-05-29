@@ -8,7 +8,8 @@ SSH profile manager with a terminal UI and CLI. Save hosts, users, and auth sett
 - **CLI** — scriptable `add`, `list`, `edit`, `delete`, `connect`, `doctor`
 - **Direct SSH** — spawn `ssh` to host:port
 - **Cloudflare Access** — shared `cloudflared` tunnel per hostname, multiple SSH sessions per tunnel
-- **Session manager** — list, kill, and kill-all with confirmation
+- **Background connect** — headless/scriptable SSH (`-b`) with log files and session tracking
+- **Session manager** — list, kill, and kill-all (TUI and CLI)
 - **Passwords** — OS keyring (`mewsh` service); never stored in `config.json`
 - **Auto password** (Linux/macOS) — `expect` or `sshpass` when configured
 
@@ -73,6 +74,7 @@ mewsh --config /path/to/config.json
 | Path | Purpose |
 |------|---------|
 | `<config_dir>/config.json` | Profiles and settings |
+| `<config_dir>/sessions/*.log` | Background SSH session output |
 | `<config_dir>/bin/cloudflared(.exe)` | Bundled cloudflared (after `mewsh cloudflared update`) |
 
 Config directory is created with restrictive permissions on Unix. Passwords use the system keyring only.
@@ -87,17 +89,20 @@ mewsh add              # Add profile (interactive)
 mewsh edit <alias>     # Edit profile
 mewsh delete <alias>   # Delete profile
 mewsh list             # List profiles (table)
-mewsh connect <alias>           # Connect (blocking; opens terminal)
-mewsh connect <alias> -b        # Background (no GUI; survives shell exit)
-mewsh sessions                  # List active SSH sessions
-mewsh sessions kill <id>        # Stop a session
-mewsh sessions kill --alias <a> # Stop all sessions for a profile
-mewsh sessions kill --all       # Stop every session
-mewsh doctor           # Check ssh, terminal, cloudflared
-mewsh cloudflared update   # Download/update bundled cloudflared
-mewsh version          # Show version and install method
-mewsh update           # Update to latest release
-mewsh update --check # Only check for updates
+mewsh connect <alias>              # Connect (blocking; opens terminal)
+mewsh connect <alias> -b           # Background (no GUI; survives shell exit)
+mewsh sessions                     # List active SSH sessions (same as sessions list)
+mewsh sessions list                # List sessions (alias: ls)
+mewsh sessions list --json         # List sessions as JSON
+mewsh sessions kill <id> [id...]   # Stop one or more sessions
+mewsh sessions kill --alias <a>    # Stop all sessions for a profile
+mewsh sessions kill --all          # Stop every session
+mewsh doctor                       # Check ssh, terminal, cloudflared
+mewsh cloudflared update           # Download/update bundled cloudflared
+mewsh version                      # Show version, install method, release status
+mewsh update                       # Update to latest release
+mewsh update --check               # Only check for updates
+mewsh update --force               # Reinstall even if up to date (go install: -a, GOPROXY=direct)
 ```
 
 Global flag: `--config <path>` — custom config file location.
@@ -108,11 +113,11 @@ Global flag: `--config <path>` — custom config file location.
 
 | Install method | Update action |
 |----------------|---------------|
-| **Homebrew** (`brew tap mewisme/mewsh`) | `brew upgrade mewsh` |
-| **go install** | `go install github.com/mewisme/mewsh@latest` |
+| **Homebrew** | `brew upgrade mewsh` |
+| **go install** | `go install github.com/mewisme/mewsh@<release-tag>` (latest GitHub tag) |
 | **Binary** (release download) | Downloads from GitHub Releases and replaces the executable |
 
-`mewsh version` prints the current version, platform, install method, and whether a newer release exists.
+`mewsh version` prints build info, install method, and whether a newer release is available. Use `mewsh update --force` to reinstall via go install when already on the latest tag (bypasses module/build cache).
 
 ## TUI
 
@@ -120,15 +125,19 @@ Global flag: `--config <path>` — custom config file location.
 mewsh
 ```
 
+Press `?` anywhere for a multi-page help guide (profiles, menu, sessions, forms, confirmations). The footer shows key hints; profile count and active session count appear in the status line.
+
 ### Profile list
 
 | Key | Action |
 |-----|--------|
 | `↑` / `k`, `↓` / `j` | Move selection |
-| `/` | Filter profiles |
+| `/` | Filter by alias, host, user, or note |
 | `Enter` | Connect (detached SSH in new terminal) |
 | `m` | Open menu |
-| `q`, `Esc`, `Ctrl+C` | Quit |
+| `?` | Help guide |
+| `q`, `Ctrl+C` | Quit (confirmation; default Yes) |
+| `Esc` `Esc` | Quit quickly (double Esc) |
 
 ### Menu (`m`)
 
@@ -136,7 +145,7 @@ mewsh
 |-----|--------|
 | `a` | Add profile |
 | `e` | Edit selected profile |
-| `d` | Delete selected profile (confirm) |
+| `d` | Delete selected profile (confirm; default No) |
 | `s` | Active sessions |
 | `m` | Close menu |
 
@@ -146,10 +155,13 @@ Footer shows live **Active sessions** count when SSH sessions are running.
 
 | Key | Action |
 |-----|--------|
-| `Space` | Mark session |
-| `Enter` | Kill selected / marked (confirm) |
-| `a` | Kill all sessions (confirm) |
+| `↑` / `k`, `↓` / `j` | Move selection |
+| `/` | Filter by alias or target |
+| `Space` | Mark / unmark session |
+| `Enter` | Kill marked session(s), or selected if none marked (confirm) |
+| `a` | Kill all listed sessions (confirm) |
 | `m` / `Esc` | Back to profiles |
+| `?` | Help guide |
 
 ## Profile fields
 
@@ -201,9 +213,11 @@ For headless Linux servers (no desktop) or scripts, start SSH without a terminal
 mewsh connect myserver --background
 ```
 
-This spawns a detached **mewsh worker** in a new session (fully detached from your terminal on Windows). The worker keeps the Cloudflare tunnel alive (if needed), runs `ssh` without allocating a local TTY, and writes output to `<config_dir>/sessions/<alias>-<timestamp>.log`. Your shell returns immediately; the session keeps running after you log out of the server.
+This spawns a detached **mewsh worker** (`__bg-connect__`) in a new session (fully detached from your terminal on Windows). The worker keeps the Cloudflare tunnel alive (if needed), runs `ssh` without allocating a local TTY, and writes output to `<config_dir>/sessions/<alias>-<timestamp>.log`. Your shell returns immediately; the session keeps running after you log out of the server.
 
-Output and errors are appended to the log file path printed on start. List or stop sessions with `mewsh sessions` and `mewsh sessions kill`.
+For **Cloudflare Access** profiles, the worker holds one `cloudflared` tunnel for the whole session (instead of `ProxyCommand` per SSH handshake), which avoids extra console flashes on Windows.
+
+On start, mewsh prints the session id, worker PID, log path, and copy-paste **SSH command hints** (interactive terminal vs background worker). List or stop sessions with `mewsh sessions` and `mewsh sessions kill`.
 
 ## Terminal spawning
 
