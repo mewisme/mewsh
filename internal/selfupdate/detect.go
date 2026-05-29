@@ -63,7 +63,7 @@ func DetectInstall() (InstallInfo, error) {
 
 func detectHomebrew(exe string) (InstallMethod, bool) {
 	lower := strings.ToLower(filepath.ToSlash(exe))
-	if strings.Contains(lower, "/cellar/mewsh/") {
+	if strings.Contains(lower, "/cellar/mewsh/") || strings.Contains(lower, "/caskroom/mewsh/") {
 		return InstallHomebrew, true
 	}
 	brew, err := exec.LookPath("brew")

@@ -18,10 +18,12 @@ SSH profile manager with a terminal UI and CLI. Save hosts, users, and auth sett
 
 ```bash
 brew tap mewisme/mewsh
-brew install mewsh
+brew install --cask mewsh
 ```
 
-After the first tagged release, GoReleaser updates `Formula/mewsh.rb` in this repo automatically.
+After the first tagged release, GoReleaser updates `Casks/mewsh.rb` in this repo automatically.
+
+If you previously installed the old formula, `brew upgrade mewsh` migrates to the cask via `tap_migrations.json`.
 
 ### Releases
 
@@ -207,11 +209,13 @@ The [Release](.github/workflows/release.yml) workflow will:
 
 - Build Linux, macOS, and Windows binaries (amd64, arm64, and 386 for Linux/Windows)
 - Publish GitHub release archives and checksums
-- Commit an updated Homebrew formula to `Formula/mewsh.rb` on `main`
+- Commit an updated Homebrew cask to `Casks/mewsh.rb` on `main`
 
 [CI](.github/workflows/ci.yml) runs tests on push/PR.
 
-**Note:** The release job needs permission to push to `main` (for the formula commit). The default `GITHUB_TOKEN` in the workflow is sufficient when the formula lives in this repository.
+**Note:** The release job needs permission to push to `main` (for the cask commit). The default `GITHUB_TOKEN` in the workflow is sufficient when the cask lives in this repository.
+
+After the first cask release, remove any legacy `Formula/mewsh.rb` from the default branch if it exists.
 
 ## Requirements
 
