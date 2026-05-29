@@ -92,7 +92,10 @@ func (m sessionsListModel) buildList() list.Model {
 }
 
 func (m sessionsListModel) withSize(w, h int) sessionsListModel {
-	m.list.SetSize(max(20, w), max(4, h))
+	w = max(20, w)
+	h = max(4, h)
+	m.list.SetSize(w, h)
+	m.list.Styles.TitleBar = m.list.Styles.TitleBar.Width(w)
 	return m
 }
 

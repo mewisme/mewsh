@@ -250,7 +250,7 @@ func layoutHelpScreen(w, h, pageIdx int) string {
 	header := renderHeader(w)
 	content := renderHelpPage(pages[pageIdx], pageIdx, len(pages), w)
 	bodyH := max(4, h-lipgloss.Height(header)-1)
-	body := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, content)
+	body := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, content))
 	return lipgloss.JoinVertical(lipgloss.Left, header, body)
 }
 

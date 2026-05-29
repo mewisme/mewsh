@@ -27,10 +27,21 @@ func horizontalRule(w int) string {
 	return ruleStyle.Render(strings.Repeat("─", w))
 }
 
-func renderHeader(w int) string {
-	title := titleStyle.Width(w).Align(lipgloss.Center).Render(headerTitle)
-	subtitle := subtitleStyle.Width(w).Align(lipgloss.Center).Render(headerSubtitle)
-	return lipgloss.JoinVertical(lipgloss.Center, horizontalRule(w), title, subtitle)
+// centerColumn places a block that is already contentColumnWidth(screenW) wide
+// into the horizontal center of the terminal.
+func centerColumn(screenW int, block string) string {
+	if screenW < 1 {
+		screenW = defaultTermWidth
+	}
+	return lipgloss.PlaceHorizontal(screenW, lipgloss.Center, block)
+}
+
+func renderHeader(screenW int) string {
+	cw := listContentWidth(screenW)
+	title := titleStyle.Width(cw).Align(lipgloss.Center).Render(headerTitle)
+	subtitle := subtitleStyle.Width(cw).Align(lipgloss.Center).Render(headerSubtitle)
+	inner := lipgloss.JoinVertical(lipgloss.Left, horizontalRule(cw), title, subtitle)
+	return centerColumn(screenW, inner)
 }
 
 func clampDims(w, h int) (int, int) {
@@ -76,7 +87,7 @@ func layoutScreen(w, h int, body, bottomBar, errMsg string) string {
 	}
 
 	bodyH := max(4, h-hdrH-botH-errH)
-	bodyBlock := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, body)
+	bodyBlock := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, body))
 
 	parts := []string{header, bodyBlock}
 	if errLine != "" {

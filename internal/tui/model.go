@@ -487,22 +487,26 @@ func (m Model) View() string {
 	switch m.screen {
 	case screenForm:
 		bottom := formBottomBar(w, m.form.stepIndex+1, len(m.form.steps))
-		body := lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, m.form.View())
+		bodyH := max(4, h-headerHeight(w)-bottomBarHeight(w, bottom))
+		body := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, m.form.View()))
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenConfirmDelete:
 		bottom := confirmBottomBar(w, m.confirmAlias, false)
 		body := confirmStyle.Width(max(40, w-8)).Render(fmt.Sprintf("Delete profile %q? %s", m.confirmAlias, confirmYNPrompt(false)))
-		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
+		bodyH := max(4, h-headerHeight(w)-bottomBarHeight(w, bottom))
+		body = lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, body))
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenConfirmKillSessions:
 		bottom := killConfirmBottomBar(w, m.confirmKillPrompt, false)
 		body := confirmStyle.Width(max(40, w-8)).Render(m.confirmKillPrompt)
-		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
+		bodyH := max(4, h-headerHeight(w)-bottomBarHeight(w, bottom))
+		body = lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, body))
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenConfirmQuit:
 		bottom := quitConfirmBottomBar(w)
 		body := confirmStyle.Width(max(40, w-8)).Render("Quit mewsh? " + confirmYNPrompt(true))
-		body = lipgloss.Place(w, max(4, h-headerHeight(w)-bottomBarHeight(w, bottom)), lipgloss.Center, lipgloss.Center, body)
+		bodyH := max(4, h-headerHeight(w)-bottomBarHeight(w, bottom))
+		body = lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, body))
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenSessions:
 		return layoutScreen(w, h, m.sessions.View(), m.sessionsBottomBar(), errMsg)

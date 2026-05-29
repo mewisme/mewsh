@@ -63,7 +63,10 @@ func (m listModel) buildList() list.Model {
 }
 
 func (m listModel) withSize(w, h int) listModel {
-	m.list.SetSize(max(20, w), max(4, h))
+	w = max(20, w)
+	h = max(4, h)
+	m.list.SetSize(w, h)
+	m.list.Styles.TitleBar = m.list.Styles.TitleBar.Width(w)
 	return m
 }
 
