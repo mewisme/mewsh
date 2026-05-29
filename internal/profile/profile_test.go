@@ -3,6 +3,8 @@ package profile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -85,13 +87,30 @@ func TestBuildSSHArgs(t *testing.T) {
 		KeyPath:  "/home/user/.ssh/id_rsa",
 	}
 	args := p.BuildSSHArgs("127.0.0.1", 2222)
-	want := []string{"ssh", "-p", "2222", "-i", "/home/user/.ssh/id_rsa", "ubuntu@127.0.0.1"}
-	if len(args) != len(want) {
-		t.Fatalf("got %v want %v", args, want)
+	if args[0] != "ssh" {
+		t.Fatalf("argv[0] = %q, want ssh", args[0])
 	}
-	for i := range want {
-		if args[i] != want[i] {
-			t.Fatalf("got %v want %v", args, want)
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(stringsJoinArgs(args), "-tt ") {
+			t.Fatalf("windows key auth should use -tt, got %v", args)
 		}
 	}
+	joined := stringsJoinArgs(args)
+	for _, want := range []string{"-p", "2222", "-i", "/home/user/.ssh/id_rsa", "ubuntu@127.0.0.1"} {
+		if !containsArg(joined, want) {
+			t.Fatalf("missing %q in %v", want, args)
+		}
+	}
+}
+
+func stringsJoinArgs(args []string) string {
+	s := ""
+	for _, a := range args {
+		s += a + " "
+	}
+	return s
+}
+
+func containsArg(haystack, needle string) bool {
+	return strings.Contains(haystack, needle+" ")
 }

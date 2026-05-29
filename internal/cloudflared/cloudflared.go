@@ -28,6 +28,29 @@ type asset struct {
 }
 
 func ResolvePath(cfg *config.Config) (string, error) {
+	if path, err := resolveExisting(cfg); err != nil || path != "" {
+		return path, err
+	}
+	path, err := DownloadLatest(cfg)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// ResolvePathForConnect returns cloudflared without downloading (connect must stay fast).
+func ResolvePathForConnect(cfg *config.Config) (string, error) {
+	path, err := resolveExisting(cfg)
+	if err != nil {
+		return "", err
+	}
+	if path != "" {
+		return path, nil
+	}
+	return "", fmt.Errorf("cloudflared not found — run: mewsh cloudflared update")
+}
+
+func resolveExisting(cfg *config.Config) (string, error) {
 	if cfg.CloudflaredPath != "" {
 		if fileExists(cfg.CloudflaredPath) {
 			return cfg.CloudflaredPath, nil
@@ -43,11 +66,7 @@ func ResolvePath(cfg *config.Config) (string, error) {
 	if path, err := execLookPath("cloudflared"); err == nil {
 		return path, nil
 	}
-	path, err := DownloadLatest(cfg)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
+	return "", nil
 }
 
 func Update(cfg *config.Config) (string, error) {

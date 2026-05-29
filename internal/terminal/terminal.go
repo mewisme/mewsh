@@ -12,13 +12,18 @@ import (
 const WindowTitle = "MewSH"
 
 func SpawnDetached(argv []string) error {
+	return SpawnDetachedEnv(argv, nil)
+}
+
+// SpawnDetachedEnv starts SSH in a new terminal, optionally with extra environment variables.
+func SpawnDetachedEnv(argv []string, extraEnv []string) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("empty command")
 	}
 	if err := ensureSSH(argv[0]); err != nil {
 		return err
 	}
-	err := spawnDetachedPlatform(argv)
+	err := spawnDetachedPlatform(argv, extraEnv)
 	if err != nil {
 		return printFallback(argv, err)
 	}

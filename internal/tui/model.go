@@ -35,6 +35,8 @@ type Model struct {
 	confirmKillIDs    []string
 	confirmKillAll    bool
 	err               error
+	connecting        bool
+	connectingAlias   string
 	menuOpen          bool
 	quitting          bool
 	width             int
@@ -96,6 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == screenList && !m.list.filterInputActive() {
 			switch {
 			case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+c", "q", "esc"))):
+				m.connecting = false
 				connect.CleanupActive()
 				m.quitting = true
 				return m, tea.Quit
@@ -111,13 +114,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, sessionTickCmd()
 	case connectDoneMsg:
+		m.connecting = false
+		m.connectingAlias = ""
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
 			m.err = nil
 		}
 		m.syncListSize()
-		return m, sessionTickCmd()
+		// Re-sync layout after a detached spawn (Windows ConPTY can desync until resized).
+		return m, tea.Batch(sessionTickCmd(), m.refreshLayout(), tea.ClearScreen)
 	case saveDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -199,9 +205,14 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.refreshLayout()
 			}
 		case "enter":
+			if m.connecting {
+				return m, nil
+			}
 			if p := m.list.selectedProfile(); p != nil {
 				m.err = nil
-				return m, m.connectCmd(p.Alias)
+				m.connecting = true
+				m.connectingAlias = p.Alias
+				return m, tea.Batch(m.connectCmd(p.Alias), m.refreshLayout())
 			}
 		}
 	}

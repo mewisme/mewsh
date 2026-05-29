@@ -9,17 +9,30 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
-func spawnDetachedPlatform(argv []string) error {
+func spawnDetachedPlatform(argv []string, extraEnv []string) error {
 	sshLine := shellJoin(argv)
+	fromTUI := os.Getenv("MEWSH_TUI") == "1"
 	attempts := []func() error{}
+
+	// Prefer Windows Terminal — least likely to disturb the parent Bubble Tea console.
+	attempts = append(attempts, func() error {
+		if _, err := exec.LookPath("wt"); err != nil {
+			return err
+		}
+		args := append([]string{"-w", "0", "nt", "--title", WindowTitle, "--"}, argv...)
+		return startInNewConsoleEnv(extraEnv, "wt", args...)
+	})
 
 	if script, err := writeSSHBatch(argv); err == nil {
 		scriptPath := script
 		attempts = append(attempts, func() error {
-			return exec.Command("cmd", "/C", "start", WindowTitle, "cmd", "/K", scriptPath).Run()
+			return startInNewConsoleEnv(extraEnv, "cmd", "/C", scriptPath)
 		})
 		go func() {
 			time.Sleep(time.Hour)
@@ -27,19 +40,12 @@ func spawnDetachedPlatform(argv []string) error {
 		}()
 	}
 
-	attempts = append(attempts,
-		func() error {
-			if _, err := exec.LookPath("wt"); err != nil {
-				return err
-			}
-			// START "" wt — empty title so wt.exe is the command. --title is an nt flag, not global.
-			args := append([]string{"/C", "start", "", "wt", "-w", "0", "nt", "--title", WindowTitle, "--"}, argv...)
-			return exec.Command("cmd", args...).Run()
-		},
-		func() error {
-			return exec.Command("cmd", "/C", "start", WindowTitle, "cmd", "/K", "title "+WindowTitle+" & "+sshLine).Run()
-		},
-	)
+	// cmd /k last — can confuse ConPTY when spawned from the TUI parent.
+	if !fromTUI {
+		attempts = append(attempts, func() error {
+			return startInNewConsoleEnv(extraEnv, "cmd", "/k", "title "+WindowTitle+" & "+sshLine)
+		})
+	}
 
 	var last error
 	for _, fn := range attempts {
@@ -50,6 +56,27 @@ func spawnDetachedPlatform(argv []string) error {
 		return nil
 	}
 	return last
+}
+
+// startInNewConsoleEnv runs a process in a fresh console without touching the parent
+// terminal (required when spawning from a Bubble Tea TUI).
+func startInNewConsoleEnv(extraEnv []string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Env = mergeEnv(os.Environ(), extraEnv)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_CONSOLE,
+	}
+	return cmd.Start()
+}
+
+func mergeEnv(base, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	out = append(out, base...)
+	out = append(out, extra...)
+	return out
 }
 
 func runInteractivePlatform(argv []string, onStarted SSHStartedFunc) error {
@@ -76,7 +103,7 @@ func runInteractiveWT(argv []string, onStarted SSHStartedFunc) func() error {
 			return err
 		}
 		args := append([]string{"-w", "0", "nt", "--title", WindowTitle, "--"}, argv...)
-		if err := exec.Command("wt", args...).Start(); err != nil {
+		if err := startInNewConsoleEnv(nil, "wt", args...); err != nil {
 			return err
 		}
 		host, port := sshProcessMarkers(argv)
@@ -98,7 +125,9 @@ func runInteractiveBatch(argv []string) func() error {
 			return err
 		}
 		defer os.Remove(script)
-		return exec.Command("cmd", "/C", "start", "/wait", WindowTitle, "cmd", "/C", script).Run()
+		cmd := exec.Command("cmd", "/C", script)
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+		return cmd.Run()
 	}
 }
 
@@ -106,14 +135,18 @@ func runInteractivePowerShell(argv []string) func() error {
 	return func() error {
 		sshLine := shellJoin(argv)
 		ps := fmt.Sprintf("& {%s}; exit $LASTEXITCODE", sshLine)
-		return exec.Command("cmd", "/C", "start", "/wait", WindowTitle, "powershell", "-NoProfile", "-Command", "title "+WindowTitle+"; "+ps).Run()
+		cmd := exec.Command("powershell", "-NoProfile", "-Command", "title "+WindowTitle+"; "+ps)
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+		return cmd.Run()
 	}
 }
 
 func runInteractiveCmd(argv []string) func() error {
 	return func() error {
 		sshLine := shellJoin(argv)
-		return exec.Command("cmd", "/C", "start", "/wait", WindowTitle, "cmd", "/C", "title "+WindowTitle+" && "+sshLine).Run()
+		cmd := exec.Command("cmd", "/C", "title "+WindowTitle+" && "+sshLine)
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+		return cmd.Run()
 	}
 }
 
@@ -187,7 +220,7 @@ func writeSSHBatch(argv []string) (string, error) {
 	}
 
 	line := shellJoin(argv)
-	content := "@echo off\r\ntitle " + WindowTitle + "\r\n" + line + "\r\nexit /b %ERRORLEVEL%\r\n"
+	content := "@echo off\r\ntitle " + WindowTitle + "\r\n" + line + "\r\nif errorlevel 1 (\r\n  echo.\r\n  echo SSH exited with error %ERRORLEVEL%.\r\n  pause\r\n)\r\n"
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
 		os.Remove(name)

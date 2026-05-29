@@ -50,7 +50,7 @@ func connectDirect(p profile.Profile) error {
 	if err != nil {
 		return err
 	}
-	if err := terminal.SpawnDetached(argv); err != nil {
+	if err := detachedSpawn(p, argv); err != nil {
 		return err
 	}
 	sessionID := registerSSHSession(p.Alias, "", argv)
@@ -91,6 +91,12 @@ func connectCloudflare(cfg *config.Config, p profile.Profile, o Options) error {
 }
 
 func connectCloudflareDetached(cfg *config.Config, p profile.Profile, o Options) error {
+	// Windows OpenSSH + password auth hangs when using a pre-started localhost tunnel;
+	// use cloudflared as ProxyCommand instead (matches Cloudflare's recommended ssh config).
+	if runtime.GOOS == "windows" {
+		return connectCloudflareDetachedProxy(cfg, p)
+	}
+
 	hostname := p.CFHostname
 	tun, _, err := acquireSharedTunnel(cfg, hostname, o)
 	if err != nil {
@@ -103,7 +109,7 @@ func connectCloudflareDetached(cfg *config.Config, p profile.Profile, o Options)
 		return err
 	}
 
-	if err := terminal.SpawnDetached(argv); err != nil {
+	if err := detachedSpawn(p, argv); err != nil {
 		releaseSharedTunnel(hostname)
 		return err
 	}
@@ -114,8 +120,22 @@ func connectCloudflareDetached(cfg *config.Config, p profile.Profile, o Options)
 	return nil
 }
 
+func connectCloudflareDetachedProxy(cfg *config.Config, p profile.Profile) error {
+	argv, _, err := buildCloudflareProxyArgs(cfg, p)
+	if err != nil {
+		return err
+	}
+	if err := detachedSpawn(p, argv); err != nil {
+		return err
+	}
+	sessionID := registerSSHSession(p.Alias, p.CFHostname, argv)
+	argvCopy := append([]string(nil), argv...)
+	go monitorDetachedSSH(sessionID, argvCopy)
+	return nil
+}
+
 func startCloudflareTunnel(cfg *config.Config, hostname string, o Options) (*tunnel.Tunnel, context.CancelFunc, error) {
-	cfPath, err := cloudflared.ResolvePath(cfg)
+	cfPath, err := cloudflared.ResolvePathForConnect(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -148,7 +168,8 @@ func buildLaunchArgs(p profile.Profile, host string, port int) ([]string, error)
 
 func buildAutoPasswordArgs(p profile.Profile, host string, port int) ([]string, error) {
 	if runtime.GOOS == "windows" {
-		return nil, fmt.Errorf("password_mode auto is not supported on Windows")
+		// Password is supplied via SSH_ASKPASS in spawnExtraEnv.
+		return p.BuildSSHArgs(host, port), nil
 	}
 	pass, err := secret.GetPassword(p.PasswordRef)
 	if err != nil {

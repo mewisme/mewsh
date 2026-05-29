@@ -38,8 +38,12 @@ go install github.com/mewisme/mewsh@latest
 ```bash
 git clone https://github.com/mewisme/mewsh.git
 cd mewsh
-go build -o mewsh .
+go build -ldflags="-s -w" -o mewsh .
 ```
+
+On Windows with Go 1.26+, use `-ldflags="-s -w"` so the executable runs correctly.
+
+The default `mewsh` command opens the TUI — run it from a terminal (Windows Terminal, PowerShell, or cmd), not by double-clicking the binary.
 
 ## Quick start
 
@@ -165,7 +169,7 @@ Footer shows live **Active sessions** count when SSH sessions are running.
 | `agent` | `ssh user@host` (SSH agent) |
 | `key` | `ssh -i <key_path> user@host` |
 | `password` + `manual` | Native `ssh`; password at prompt |
-| `password` + `auto` | `expect` or `sshpass` (Linux/macOS only; not Windows) |
+| `password` + `auto` | `expect`/`sshpass` (Unix) or keyring + `SSH_ASKPASS` (Windows) |
 
 ## Connect behavior
 

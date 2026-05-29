@@ -26,4 +26,4 @@ jobs:
         run: go test ./...
 
       - name: Build
-        run: go build -v -o mewsh .
+        run: go build -ldflags="-s -w" -v -o mewsh .

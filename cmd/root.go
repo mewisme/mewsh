@@ -4,18 +4,16 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mewisme/mewsh/internal/config"
-	"github.com/mewisme/mewsh/internal/connect"
-	"github.com/mewisme/mewsh/internal/terminal"
 	"github.com/mewisme/mewsh/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "mewsh",
-	Short: "SSH profile manager",
-	Long:  "Manage SSH credentials and connect servers.",
+	Use:          "mewsh",
+	Short:        "SSH profile manager",
+	Long:         "Manage SSH credentials and connect servers.",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := config.EnsureDir(); err != nil {
 			return err
@@ -24,14 +22,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		m := tui.NewModel(cfg)
-		p := tea.NewProgram(m, tea.WithAltScreen())
-		p.SetWindowTitle(terminal.WindowTitle)
-		if _, err := p.Run(); err != nil {
-			connect.CleanupActive()
+		if err := tui.Run(cfg); err != nil {
 			return fmt.Errorf("tui: %w", err)
 		}
-		connect.CleanupActive()
 		return nil
 	},
 }

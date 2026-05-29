@@ -79,19 +79,22 @@ func renderBottomBar(w int, bindings []footerBinding, status string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m listModel) footerStatus(profileCount int, activeSessions int) string {
+func (m listModel) footerStatus(profileCount int, activeSessions int, extra string) string {
+	if extra != "" {
+		return extra
+	}
 	if activeSessions > 0 {
 		return fmt.Sprintf("%d profiles | Active sessions: %d", profileCount, activeSessions)
 	}
 	return fmt.Sprintf("%d profiles", profileCount)
 }
 
-func listBottomBar(w int, m listModel, profileCount int, menuOpen bool, activeSessions int) string {
+func listBottomBar(w int, m listModel, profileCount int, menuOpen bool, activeSessions int, statusOverride string) string {
 	bindings := listFooterBindings()
 	if menuOpen {
 		bindings = listMenuFooterBindings()
 	}
-	return renderBottomBar(w, bindings, m.footerStatus(profileCount, activeSessions))
+	return renderBottomBar(w, bindings, m.footerStatus(profileCount, activeSessions, statusOverride))
 }
 
 func formBottomBar(w int, step, total int) string {

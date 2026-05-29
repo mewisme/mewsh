@@ -109,11 +109,6 @@ func (p Profile) Validate(existingAliases []string, editing bool) error {
 		default:
 			return fmt.Errorf("password_mode must be manual or auto")
 		}
-		if p.PasswordMode == PasswordAuto {
-			if runtime.GOOS == "windows" {
-				return fmt.Errorf("password_mode auto is not supported on Windows")
-			}
-		}
 	}
 
 	switch p.ConnectionType {
@@ -127,7 +122,28 @@ func (p Profile) Validate(existingAliases []string, editing bool) error {
 
 func (p Profile) BuildSSHArgs(host string, port int) []string {
 	target := fmt.Sprintf("%s@%s", p.User, host)
-	args := []string{"ssh", "-p", strconv.Itoa(port)}
+	args := []string{"ssh"}
+
+	if runtime.GOOS == "windows" {
+		args = append(args,
+			"-o", "GSSAPIAuthentication=no",
+			"-o", "ConnectTimeout=30",
+			"-o", "StrictHostKeyChecking=accept-new",
+		)
+		if p.AuthType == AuthPassword {
+			// No -tt: password comes from SSH_ASKPASS; RequestTTY keeps the remote shell interactive.
+			args = append(args,
+				"-o", "RequestTTY=force",
+				"-o", "PreferredAuthentications=keyboard-interactive,password",
+				"-o", "PubkeyAuthentication=no",
+				"-o", "NumberOfPasswordPrompts=3",
+			)
+		} else {
+			args = append(args, "-tt")
+		}
+	}
+
+	args = append(args, "-p", strconv.Itoa(port))
 	if p.AuthType == AuthKey && p.KeyPath != "" {
 		args = append(args, "-i", p.KeyPath)
 	}

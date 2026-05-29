@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-func spawnDetachedPlatform(argv []string) error {
+func spawnDetachedPlatform(argv []string, extraEnv []string) error {
+	_ = extraEnv
 	if runtime.GOOS == "darwin" {
 		script := fmt.Sprintf(`tell application "Terminal"
   set t to do script "%s"

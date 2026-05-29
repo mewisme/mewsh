@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -89,7 +90,15 @@ func layoutScreen(w, h int, body, bottomBar, errMsg string) string {
 
 func (m *Model) listBottomBar() string {
 	w, _ := clampDims(m.width, m.height)
-	return listBottomBar(w, m.list, len(m.cfg.Profiles), m.menuOpen, connect.ActiveSessionCount())
+	status := ""
+	if m.connecting {
+		if m.connectingAlias != "" {
+			status = fmt.Sprintf("Connecting to %s…", m.connectingAlias)
+		} else {
+			status = "Connecting…"
+		}
+	}
+	return listBottomBar(w, m.list, len(m.cfg.Profiles), m.menuOpen, connect.ActiveSessionCount(), status)
 }
 
 func listContentWidth(screenW int) int {
