@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -93,11 +92,7 @@ func previewInteractiveSSHArgv(cfg *config.Config, p profile.Profile) ([]string,
 	o := defaultOptions()
 	switch p.ConnectionType {
 	case profile.ConnectionCloudflareAccess:
-		if runtime.GOOS == "windows" {
-			argv, _, err := buildCloudflareSSHConfigArgs(cfg, p, false)
-			return argv, err
-		}
-		return buildLaunchArgs(p, p.CFHostname, p.Port, o)
+		return previewInteractiveCloudflareSSH(cfg, p, o)
 	default:
 		return buildLaunchArgs(p, p.Host, p.Port, o)
 	}
