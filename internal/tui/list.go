@@ -50,6 +50,7 @@ func (m listModel) buildList() list.Model {
 	l.Title = "Profiles"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
+	l.InfiniteScrolling = true
 	// Center title via TitleBar only — do not set Width on Title or bubbles
 	// appends "  "+status and truncates, which shows "..." at end of line.
 	l.Styles.TitleBar = lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Padding(0, 0, 1, 0)
