@@ -490,8 +490,6 @@ func (f formModel) View() string {
 		body.WriteString(stepLabelStyle.Render("Profile Summary"))
 		body.WriteString("\n\n")
 		body.WriteString(f.renderSummary())
-		body.WriteString("\n\n")
-		body.WriteString(wizardHelpStyle.Render("[S] Save  [E] Edit  [Esc] Cancel"))
 	} else {
 		stepNum := f.stepIndex + 1
 		total := len(f.steps)
@@ -504,8 +502,6 @@ func (f formModel) View() string {
 			body.WriteString("\n")
 			body.WriteString(errStyle.Render(f.errMsg))
 		}
-		body.WriteString("\n\n")
-		body.WriteString(wizardHelpStyle.Render(f.stepHelp()))
 	}
 
 	return wizardBoxStyle.Width(f.boxWidth()).Render(body.String())
@@ -607,19 +603,11 @@ func authLabel(auth string) string {
 	}
 }
 
-func (f formModel) stepHelp() string {
-	if f.isChoiceStep() {
-		return "↑↓ Select  Enter Continue  Esc Cancel  Ctrl+←/→ Step"
-	}
-	return "Enter Continue  Esc Cancel  Ctrl+←/→ Step"
-}
-
 var (
 	wizardTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	wizardBoxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("69")).Padding(1, 2)
 	stepLabelStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	questionStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
 	choiceSelectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
-	wizardHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	summaryStyle        = lipgloss.NewStyle().PaddingLeft(1)
 )

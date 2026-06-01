@@ -1,11 +1,9 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mewisme/mewsh/internal/connect"
 )
 
 const (
@@ -99,21 +97,6 @@ func layoutScreen(w, h int, body, bottomBar, errMsg string) string {
 	return strings.Join(parts, "\n")
 }
 
-func (m *Model) listBottomBar() string {
-	w, _ := clampDims(m.width, m.height)
-	status := ""
-	if m.connecting {
-		if m.connectingAlias != "" {
-			status = fmt.Sprintf("Connecting to %s…", m.connectingAlias)
-		} else {
-			status = "Connecting…"
-		}
-	} else if m.quitEscPending {
-		status = "Press esc again to quit"
-	}
-	return listBottomBar(w, m.list, len(m.cfg.Profiles), m.menuOpen, connect.ActiveSessionCount(), status)
-}
-
 func listContentWidth(screenW int) int {
 	inner := screenW - 4
 	if inner > 72 {
@@ -127,24 +110,17 @@ func listContentWidth(screenW int) int {
 
 func (m *Model) syncListSize() {
 	w, h := clampDims(m.width, m.height)
-	bottom := m.listBottomBar()
-	used := headerHeight(w) + bottomBarHeight(w, bottom)
+	used := headerHeight(w)
 	if m.err != nil {
 		used += errLineHeight(m.err.Error())
 	}
 	listH := max(4, h-used)
-	m.list = m.list.withSize(listContentWidth(w), listH)
-}
-
-func (m *Model) sessionsBottomBar() string {
-	w, _ := clampDims(m.width, m.height)
-	return sessionsBottomBar(w, m.sessions)
+	m.list = m.list.withMenuOpen(m.menuOpen).withSize(listContentWidth(w), listH)
 }
 
 func (m *Model) syncSessionsSize() {
 	w, h := clampDims(m.width, m.height)
-	bottom := m.sessionsBottomBar()
-	used := headerHeight(w) + bottomBarHeight(w, bottom)
+	used := headerHeight(w)
 	if m.err != nil {
 		used += errLineHeight(m.err.Error())
 	}

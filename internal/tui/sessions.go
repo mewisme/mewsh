@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -79,15 +80,15 @@ func (m sessionsListModel) buildList() list.Model {
 	delegate := newTwoLineDelegate()
 
 	l := list.New(listItems, delegate, w, h)
-	l.Title = "Active Sessions"
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
-	l.Styles.TitleBar = lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Padding(0, 0, 1, 0)
-	l.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("69"))
-	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
-	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(lipgloss.Color("170"))
-	l.Styles.PaginationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	l.SetShowHelp(false)
+	configureList(&l, "Active Sessions", "session", "sessions", w)
+	l.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "mark")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "kill")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "all")),
+			key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "back")),
+		}
+	}
 	return l
 }
 
@@ -96,6 +97,7 @@ func (m sessionsListModel) withSize(w, h int) sessionsListModel {
 	h = max(4, h)
 	m.list.SetSize(w, h)
 	m.list.Styles.TitleBar = m.list.Styles.TitleBar.Width(w)
+	m.list.Styles.HelpStyle = m.list.Styles.HelpStyle.Width(w)
 	return m
 }
 
@@ -154,27 +156,4 @@ func (m sessionsListModel) markedIDs() []string {
 
 func (m sessionsListModel) markedCount() int {
 	return len(m.marked)
-}
-
-func sessionsBottomBar(w int, m sessionsListModel) string {
-	n := len(m.items)
-	marked := m.markedCount()
-	status := fmt.Sprintf("%d session(s)", n)
-	if marked > 0 {
-		status += fmt.Sprintf(" | %d selected", marked)
-	}
-	return renderBottomBar(w, sessionsFooterBindings(), status)
-}
-
-func sessionsFooterBindings() []footerBinding {
-	return []footerBinding{
-		{"↑/k", "up"},
-		{"↓/j", "down"},
-		{"/", "filter"},
-		{"space", "mark"},
-		{"enter", "kill"},
-		{"a", "kill all"},
-		{"m", "back"},
-		{"?", "help"},
-	}
 }

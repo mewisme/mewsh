@@ -43,8 +43,6 @@ type Model struct {
 	quitting          bool
 	quitEscPending    bool
 	lastEscPress      time.Time
-	helpOpen          bool
-	helpPage          int
 	width             int
 	height            int
 }
@@ -93,31 +91,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case tea.KeyMsg:
-		if msg.String() == "?" {
-			if m.helpOpen {
-				m.helpOpen = false
-			} else {
-				m.helpOpen = true
-				m.helpPage = 0
-				m.quitEscPending = false
-				m.lastEscPress = time.Time{}
-			}
-			return m, m.refreshLayout()
-		}
-		if m.helpOpen {
-			switch msg.String() {
-			case "esc":
-				m.helpOpen = false
-				return m, m.refreshLayout()
-			case "left", "h", "pgup":
-				m.helpPrev()
-				return m, m.refreshLayout()
-			case "right", "l", "pgdown":
-				m.helpNext()
-				return m, m.refreshLayout()
-			}
-			return m, nil
-		}
 		if m.screen == screenSessions && !m.sessions.filterInputActive() {
 			switch msg.String() {
 			case "esc", "m":
@@ -220,7 +193,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.quitEscPending = true
 			m.lastEscPress = now
-			return m, tea.Batch(m.refreshLayout(), quitEscHintExpireCmd())
+			return m, tea.Batch(m.refreshLayout(), quitEscHintExpireCmd(), m.list.statusMessage("Press esc again to quit"))
 		case "m":
 			m.quitEscPending = false
 			m.lastEscPress = time.Time{}
@@ -273,7 +246,11 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = nil
 				m.connecting = true
 				m.connectingAlias = p.Alias
-				return m, tea.Batch(m.connectCmd(p.Alias), m.refreshLayout())
+				return m, tea.Batch(
+					m.connectCmd(p.Alias),
+					m.refreshLayout(),
+					m.list.statusMessage(fmt.Sprintf("Connecting to %s…", p.Alias)),
+				)
 			}
 		}
 	}
@@ -476,9 +453,6 @@ func (m Model) View() string {
 		return ""
 	}
 	w, h := clampDims(m.width, m.height)
-	if m.helpOpen {
-		return layoutHelpScreen(w, h, m.helpPage)
-	}
 	errMsg := ""
 	if m.err != nil {
 		errMsg = m.err.Error()
@@ -486,7 +460,7 @@ func (m Model) View() string {
 
 	switch m.screen {
 	case screenForm:
-		bottom := formBottomBar(w, m.form.stepIndex+1, len(m.form.steps))
+		bottom := formBottomBar(w, m.form)
 		bodyH := max(4, h-headerHeight(w)-bottomBarHeight(w, bottom))
 		body := lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, m.form.View()))
 		return layoutScreen(w, h, body, bottom, errMsg)
@@ -509,9 +483,9 @@ func (m Model) View() string {
 		body = lipgloss.Place(w, bodyH, lipgloss.Center, lipgloss.Center, centerColumn(w, body))
 		return layoutScreen(w, h, body, bottom, errMsg)
 	case screenSessions:
-		return layoutScreen(w, h, m.sessions.View(), m.sessionsBottomBar(), errMsg)
+		return layoutScreen(w, h, m.sessions.View(), "", errMsg)
 	default:
-		return layoutScreen(w, h, m.list.View(), m.listBottomBar(), errMsg)
+		return layoutScreen(w, h, m.list.View(), "", errMsg)
 	}
 }
 
